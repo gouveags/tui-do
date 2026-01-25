@@ -1,0 +1,26 @@
+{
+  "name": "to-do",
+  "version": "1.0.0",
+  "description": "to-do list app for the terminal",
+  "keywords": [
+    "to-do",
+    "terminal"
+  ],
+  "homepage": "https://github.com/gouveags/to-do#readme",
+  "bugs": {
+    "url": "https://github.com/gouveags/to-do/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gouveags/to-do.git"
+  },
+  "license": "MIT",
+  "author": "gouveags",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "test",
+    "build": "tsc",
+    "start": "tsc && node dist/index.js"
+  }
+}
