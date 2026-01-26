@@ -1,37 +1,65 @@
 export type Todo = {
-  id: string
-  title: string
-  items: TodoItem[]
-  createdAt: number
-  updatedAt: number
-}
+  id: string;
+  title: string;
+  items: TodoItem[];
+  createdAt: number;
+  updatedAt: number;
+};
 
 export type TodoItem = {
-  text: string
-  done: boolean
-}
+  text: string;
+  done: boolean;
+};
+
+export type CursorPosition = {
+  line: number;
+  col: number;
+};
+
+export type InputBuffer = {
+  lines: string[];
+  cursor: CursorPosition;
+};
+
+export type InputMode = "single" | "multi";
+
+export type TerminalSize = {
+  rows: number;
+  cols: number;
+};
 
 export type AppView =
-  | 'main_menu'
-  | 'create_todo'
-  | 'load_todo'
-  | 'view_todo'
-  | 'quit'
+  | "main_menu"
+  | "create_todo"
+  | "load_todo"
+  | "view_todo"
+  | "quit";
 
 export type AppState = {
-  view: AppView
-  menuIndex: number
-  todos: Todo[]
-  selectedTodoId: string | null
-  inputBuffer: string
-  message: string | null
-}
+  view: AppView;
+  menuIndex: number;
+  todos: Todo[];
+  selectedTodoId: string | null;
+  inputBuffer: string;
+  input: InputBuffer;
+  inputMode: InputMode;
+  terminalSize: TerminalSize;
+  message: string | null;
+};
+
+export const createInputBuffer = (text = ""): InputBuffer => ({
+  lines: [text],
+  cursor: { line: 0, col: text.length },
+});
 
 export const createInitialState = (): AppState => ({
-  view: 'main_menu',
+  view: "main_menu",
   menuIndex: 0,
   todos: [],
   selectedTodoId: null,
-  inputBuffer: '',
+  inputBuffer: "",
+  input: createInputBuffer(),
+  inputMode: "single",
+  terminalSize: { rows: 24, cols: 80 },
   message: null,
-})
+});

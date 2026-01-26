@@ -1,3 +1,3 @@
-import { runApp } from './app.ts'
+import { runApp } from "./app.ts";
 
-runApp()
+runApp();
