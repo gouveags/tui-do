@@ -141,6 +141,26 @@ describe("parseKey", () => {
     });
   });
 
+  it("parses ctrl+up arrow", () => {
+    const key = parseKey(Buffer.from("\x1b[1;5A"));
+    assert.deepStrictEqual(key, {
+      name: "ctrl-up",
+      ctrl: true,
+      shift: false,
+      sequence: "\x1b[1;5A",
+    });
+  });
+
+  it("parses ctrl+down arrow", () => {
+    const key = parseKey(Buffer.from("\x1b[1;5B"));
+    assert.deepStrictEqual(key, {
+      name: "ctrl-down",
+      ctrl: true,
+      shift: false,
+      sequence: "\x1b[1;5B",
+    });
+  });
+
   it("returns unknown for unrecognized sequences", () => {
     const key = parseKey(Buffer.from("\x1b[Z"));
     assert.strictEqual(key.name, "unknown");

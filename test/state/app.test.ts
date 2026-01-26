@@ -250,6 +250,110 @@ describe("state transitions", () => {
       assert.strictEqual(next.todos[0]?.items[0]?.text, "New item");
       assert.strictEqual(next.inputBuffer, "");
     });
+
+    it("moves item up with MOVE_ITEM_UP", () => {
+      const todos = [
+        {
+          id: "1",
+          title: "Test",
+          items: [
+            { text: "First", done: false },
+            { text: "Second", done: false },
+            { text: "Third", done: false },
+          ],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ];
+      const state = {
+        ...createInitialState(),
+        view: "view_todo" as const,
+        todos,
+        selectedTodoId: "1",
+        menuIndex: 1,
+      };
+      const next = transition(state, { type: "MOVE_ITEM_UP" });
+      assert.strictEqual(next.todos[0]?.items[0]?.text, "Second");
+      assert.strictEqual(next.todos[0]?.items[1]?.text, "First");
+      assert.strictEqual(next.menuIndex, 0);
+    });
+
+    it("does not move first item up", () => {
+      const todos = [
+        {
+          id: "1",
+          title: "Test",
+          items: [
+            { text: "First", done: false },
+            { text: "Second", done: false },
+          ],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ];
+      const state = {
+        ...createInitialState(),
+        view: "view_todo" as const,
+        todos,
+        selectedTodoId: "1",
+        menuIndex: 0,
+      };
+      const next = transition(state, { type: "MOVE_ITEM_UP" });
+      assert.strictEqual(next.todos[0]?.items[0]?.text, "First");
+      assert.strictEqual(next.menuIndex, 0);
+    });
+
+    it("moves item down with MOVE_ITEM_DOWN", () => {
+      const todos = [
+        {
+          id: "1",
+          title: "Test",
+          items: [
+            { text: "First", done: false },
+            { text: "Second", done: false },
+            { text: "Third", done: false },
+          ],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ];
+      const state = {
+        ...createInitialState(),
+        view: "view_todo" as const,
+        todos,
+        selectedTodoId: "1",
+        menuIndex: 1,
+      };
+      const next = transition(state, { type: "MOVE_ITEM_DOWN" });
+      assert.strictEqual(next.todos[0]?.items[1]?.text, "Third");
+      assert.strictEqual(next.todos[0]?.items[2]?.text, "Second");
+      assert.strictEqual(next.menuIndex, 2);
+    });
+
+    it("does not move last item down", () => {
+      const todos = [
+        {
+          id: "1",
+          title: "Test",
+          items: [
+            { text: "First", done: false },
+            { text: "Second", done: false },
+          ],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ];
+      const state = {
+        ...createInitialState(),
+        view: "view_todo" as const,
+        todos,
+        selectedTodoId: "1",
+        menuIndex: 1,
+      };
+      const next = transition(state, { type: "MOVE_ITEM_DOWN" });
+      assert.strictEqual(next.todos[0]?.items[1]?.text, "Second");
+      assert.strictEqual(next.menuIndex, 1);
+    });
   });
 
   describe("resize", () => {

@@ -21,6 +21,8 @@ const ESCAPE_SEQUENCES: Record<string, string> = {
   "[3~": "delete",
   "[13;2u": "shift-enter",
   "[27;2;13~": "shift-enter",
+  "[1;5A": "ctrl-up",
+  "[1;5B": "ctrl-down",
 };
 
 export const parseKey = (buf: Buffer): KeyEvent => {
@@ -38,9 +40,10 @@ export const parseKey = (buf: Buffer): KeyEvent => {
     const suffix = seq.slice(1);
     const name = ESCAPE_SEQUENCES[suffix];
     const isShift = name === "shift-enter";
+    const isCtrl = name === "ctrl-up" || name === "ctrl-down";
     return {
       name: name ?? "unknown",
-      ctrl: false,
+      ctrl: isCtrl,
       shift: isShift,
       sequence: seq,
     };

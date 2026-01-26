@@ -4,7 +4,12 @@ import {
   startKeyListener,
 } from "./input/keyboard.ts";
 import type { KeyEvent } from "./input/keys.ts";
-import { cursor, keyboard, screen as screenCodes } from "./render/ansi.ts";
+import {
+  cursor,
+  keyboard,
+  screen as screenCodes,
+  sync,
+} from "./render/ansi.ts";
 import { getTerminalSize } from "./render/layout.ts";
 import { createScreen } from "./render/screen.ts";
 import type { Action } from "./state/app.ts";
@@ -44,6 +49,41 @@ const keyToAction = (key: KeyEvent, state: AppState): Action | null => {
         return { type: "NAVIGATE_DOWN" };
       case "enter":
         return { type: "SELECT" };
+      case "/":
+        return { type: "ENTER_SEARCH" };
+      case "f":
+      case "F":
+        return { type: "TOGGLE_DATE_FILTER" };
+    }
+    return null;
+  }
+
+  if (state.view === "search_todo") {
+    if (key.ctrl && (key.name === "f" || key.name === "F")) {
+      return { type: "TOGGLE_DATE_FILTER" };
+    }
+    switch (key.name) {
+      case "up":
+        return { type: "NAVIGATE_UP" };
+      case "down":
+        return { type: "NAVIGATE_DOWN" };
+      case "enter":
+        return { type: "SELECT" };
+      case "backspace":
+        return { type: "INPUT_BACKSPACE" };
+      case "delete":
+        return { type: "DELETE_FORWARD" };
+      case "left":
+        return { type: "CURSOR_LEFT" };
+      case "right":
+        return { type: "CURSOR_RIGHT" };
+      case "home":
+        return { type: "CURSOR_HOME" };
+      case "end":
+        return { type: "CURSOR_END" };
+    }
+    if (key.name.length === 1 && !key.ctrl) {
+      return { type: "INPUT_CHAR", char: key.name };
     }
     return null;
   }
@@ -51,6 +91,11 @@ const keyToAction = (key: KeyEvent, state: AppState): Action | null => {
   if (state.view === "create_todo" || state.view === "view_todo") {
     if (key.name === "shift-enter" || key.name === "newline") {
       return { type: "INSERT_NEWLINE" };
+    }
+
+    if (state.view === "view_todo") {
+      if (key.name === "ctrl-up") return { type: "MOVE_ITEM_UP" };
+      if (key.name === "ctrl-down") return { type: "MOVE_ITEM_DOWN" };
     }
 
     switch (key.name) {
@@ -91,9 +136,9 @@ export const runApp = (): void => {
   let stopListener: (() => void) | null = null;
 
   const renderFrame = () => {
-    process.stdout.write(scr.prepare());
+    process.stdout.write(sync.begin + scr.prepare());
     render(scr, state);
-    process.stdout.write(scr.flush());
+    process.stdout.write(scr.flush() + sync.end);
   };
 
   const cleanup = () => {

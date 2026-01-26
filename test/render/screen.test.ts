@@ -35,7 +35,7 @@ describe("Screen", () => {
     assert.ok(output.includes("\x1b[0m"));
   });
 
-  it("clears and resets on prepare", () => {
+  it("hides cursor, moves home, and clears screen on prepare", () => {
     const screen = createScreen();
     const output = screen.prepare();
     assert.ok(output.includes("\x1b[?25l"));

@@ -12,6 +12,7 @@ import {
   moveToLineStart,
   moveUp,
 } from "../input/cursor.ts";
+import { filterByDate, filterTodos, nextDateFilter } from "../utils/search.ts";
 import type { AppState, InputBuffer, Todo, TodoItem } from "./types.ts";
 
 export type Action =
@@ -33,7 +34,11 @@ export type Action =
   | { type: "CURSOR_END" }
   | { type: "INSERT_NEWLINE" }
   | { type: "DELETE_FORWARD" }
-  | { type: "RESIZE"; rows: number; cols: number };
+  | { type: "RESIZE"; rows: number; cols: number }
+  | { type: "MOVE_ITEM_UP" }
+  | { type: "MOVE_ITEM_DOWN" }
+  | { type: "ENTER_SEARCH" }
+  | { type: "TOGGLE_DATE_FILTER" };
 
 const MAIN_MENU_OPTIONS = 3;
 
@@ -187,10 +192,130 @@ const loadTodoTransition = (state: AppState, action: Action): AppState => {
         menuIndex: 0,
       };
     }
+    case "ENTER_SEARCH":
+      return {
+        ...state,
+        view: "search_todo",
+        menuIndex: 0,
+        searchQuery: "",
+        inputBuffer: "",
+        input: clearBuffer(),
+      };
+    case "TOGGLE_DATE_FILTER":
+      return {
+        ...state,
+        dateFilter: nextDateFilter(state.dateFilter),
+        menuIndex: 0,
+      };
     default:
       return state;
   }
 };
+
+const searchTodoTransition = (state: AppState, action: Action): AppState => {
+  switch (action.type) {
+    case "BACK":
+      return {
+        ...state,
+        view: "load_todo",
+        menuIndex: 0,
+        searchQuery: "",
+        inputBuffer: "",
+        input: clearBuffer(),
+      };
+    case "INPUT_CHAR": {
+      const newInput = insertChar(state.input, action.char);
+      const newQuery = getBufferText(newInput);
+      return {
+        ...state,
+        input: newInput,
+        inputBuffer: newQuery,
+        searchQuery: newQuery,
+        menuIndex: 0,
+      };
+    }
+    case "INPUT_BACKSPACE": {
+      const newInput = deleteBackward(state.input);
+      const newQuery = getBufferText(newInput);
+      return {
+        ...state,
+        input: newInput,
+        inputBuffer: newQuery,
+        searchQuery: newQuery,
+        menuIndex: 0,
+      };
+    }
+    case "DELETE_FORWARD": {
+      const newInput = deleteForward(state.input);
+      const newQuery = getBufferText(newInput);
+      return {
+        ...state,
+        input: newInput,
+        inputBuffer: newQuery,
+        searchQuery: newQuery,
+        menuIndex: 0,
+      };
+    }
+    case "CURSOR_LEFT":
+      return withInput(state, moveLeft(state.input));
+    case "CURSOR_RIGHT":
+      return withInput(state, moveRight(state.input));
+    case "CURSOR_HOME":
+      return withInput(state, moveToLineStart(state.input));
+    case "CURSOR_END":
+      return withInput(state, moveToLineEnd(state.input));
+    case "NAVIGATE_DOWN":
+    case "NAVIGATE_UP": {
+      const { filteredTodos } = getFilteredTodos(state);
+      const count = filteredTodos.length;
+      if (count === 0) return state;
+      const delta = action.type === "NAVIGATE_DOWN" ? 1 : -1;
+      return {
+        ...state,
+        menuIndex: (state.menuIndex + delta + count) % count,
+      };
+    }
+    case "SELECT": {
+      const { filteredTodos } = getFilteredTodos(state);
+      const entry = filteredTodos[state.menuIndex];
+      if (!entry) return state;
+      return {
+        ...state,
+        view: "view_todo",
+        selectedTodoId: entry.id,
+        menuIndex: 0,
+        searchQuery: "",
+        inputBuffer: "",
+        input: clearBuffer(),
+      };
+    }
+    case "TOGGLE_DATE_FILTER":
+      return {
+        ...state,
+        dateFilter: nextDateFilter(state.dateFilter),
+        menuIndex: 0,
+      };
+    default:
+      return state;
+  }
+};
+
+const getFilteredTodos = (
+  state: AppState,
+): { filteredTodos: { id: string; title: string }[] } => {
+  const entries = state.todos.map((t) => ({
+    id: t.id,
+    title: t.title,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+    itemCount: t.items.length,
+    doneCount: t.items.filter((i) => i.done).length,
+  }));
+  const dateFiltered = filterByDate(entries, state.dateFilter);
+  return { filteredTodos: filterTodos(dateFiltered, state.searchQuery) };
+};
+
+export { getFilteredTodos };
 
 const viewTodoTransition = (state: AppState, action: Action): AppState => {
   const todo = state.todos.find((t) => t.id === state.selectedTodoId);
@@ -253,6 +378,41 @@ const viewTodoTransition = (state: AppState, action: Action): AppState => {
         menuIndex: updatedTodo.items.length - 1,
       };
     }
+    case "MOVE_ITEM_UP": {
+      if (state.menuIndex <= 0 || todo.items.length < 2) return state;
+      const idx = state.menuIndex;
+      const items = todo.items.map((item, i) =>
+        i === idx - 1
+          ? todo.items[idx]!
+          : i === idx
+            ? todo.items[idx - 1]!
+            : item,
+      );
+      const updatedTodo = { ...todo, items, updatedAt: Date.now() };
+      return {
+        ...state,
+        todos: state.todos.map((t) => (t.id === todo.id ? updatedTodo : t)),
+        menuIndex: idx - 1,
+      };
+    }
+    case "MOVE_ITEM_DOWN": {
+      if (state.menuIndex >= todo.items.length - 1 || todo.items.length < 2)
+        return state;
+      const idx = state.menuIndex;
+      const items = todo.items.map((item, i) =>
+        i === idx
+          ? todo.items[idx + 1]!
+          : i === idx + 1
+            ? todo.items[idx]!
+            : item,
+      );
+      const updatedTodo = { ...todo, items, updatedAt: Date.now() };
+      return {
+        ...state,
+        todos: state.todos.map((t) => (t.id === todo.id ? updatedTodo : t)),
+        menuIndex: idx + 1,
+      };
+    }
     default:
       return state;
   }
@@ -281,6 +441,8 @@ export const transition = (state: AppState, action: Action): AppState => {
       return createTodoTransition(state, action);
     case "load_todo":
       return loadTodoTransition(state, action);
+    case "search_todo":
+      return searchTodoTransition(state, action);
     case "view_todo":
       return viewTodoTransition(state, action);
     default:

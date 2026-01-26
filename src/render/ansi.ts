@@ -45,6 +45,11 @@ export const screen = {
   mainBuffer: "\x1b[?1049l",
 } as const;
 
+export const sync = {
+  begin: "\x1b[?2026h",
+  end: "\x1b[?2026l",
+} as const;
+
 export const keyboard = {
   enableKittyProtocol: "\x1b[>1u",
   disableKittyProtocol: "\x1b[<u",

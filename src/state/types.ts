@@ -11,6 +11,23 @@ export type TodoItem = {
   done: boolean;
 };
 
+export type TodoIndexEntry = {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  itemCount: number;
+  doneCount: number;
+};
+
+export type TodoIndex = {
+  version: 1;
+  entries: TodoIndexEntry[];
+  lastUpdated: number;
+};
+
+export type DateFilter = "all" | "today" | "week" | "month";
+
 export type CursorPosition = {
   line: number;
   col: number;
@@ -32,6 +49,7 @@ export type AppView =
   | "main_menu"
   | "create_todo"
   | "load_todo"
+  | "search_todo"
   | "view_todo"
   | "quit";
 
@@ -45,6 +63,8 @@ export type AppState = {
   inputMode: InputMode;
   terminalSize: TerminalSize;
   message: string | null;
+  searchQuery: string;
+  dateFilter: DateFilter;
 };
 
 export const createInputBuffer = (text = ""): InputBuffer => ({
@@ -62,4 +82,6 @@ export const createInitialState = (): AppState => ({
   inputMode: "single",
   terminalSize: { rows: 24, cols: 80 },
   message: null,
+  searchQuery: "",
+  dateFilter: "all",
 });
