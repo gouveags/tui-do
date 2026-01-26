@@ -1,4 +1,5 @@
 import { renderMarkdownLines } from "../markdown/renderer.ts";
+import { renderAsciiArt } from "../render/ascii-art.ts";
 import type { Screen } from "../render/screen.ts";
 import { defaultTheme } from "../render/theme.ts";
 import type { AppState } from "../state/types.ts";
@@ -15,13 +16,15 @@ import { drawInputField } from "./input-field.ts";
 const MAIN_MENU_ITEMS = ["Create a new to-do", "Load a to-do", "Quit"];
 
 const PADDING = 4;
+const HEADER_HEIGHT = 7;
 
 const drawHeader = (
   screen: Screen,
   row: number,
   width: number,
   title: string,
-): void => {
+  useAsciiArt = true,
+): number => {
   screen.writeStyled(
     row,
     1,
@@ -29,18 +32,38 @@ const drawHeader = (
     BOX_CHARS.horizontal.repeat(width),
   );
 
+  if (useAsciiArt) {
+    const artLines = renderAsciiArt(title);
+    screen.writeAt(row + 1, 1, " ".repeat(width));
+    for (let i = 0; i < artLines.length; i++) {
+      screen.writeAt(row + 2 + i, 1, " ".repeat(width));
+      screen.writeStyled(
+        row + 2 + i,
+        PADDING,
+        defaultTheme.colors.title,
+        artLines[i] ?? "",
+      );
+    }
+    screen.writeAt(row + 5, 1, " ".repeat(width));
+    screen.writeStyled(
+      row + 6,
+      1,
+      defaultTheme.colors.border,
+      BOX_CHARS.horizontal.repeat(width),
+    );
+    return HEADER_HEIGHT;
+  }
+
   screen.writeAt(row + 1, 1, " ".repeat(width));
-
   screen.writeStyled(row + 2, PADDING, defaultTheme.colors.title, title);
-
   screen.writeAt(row + 3, 1, " ".repeat(width));
-
   screen.writeStyled(
     row + 4,
     1,
     defaultTheme.colors.border,
     BOX_CHARS.horizontal.repeat(width),
   );
+  return 5;
 };
 
 const drawFooter = (
@@ -66,8 +89,7 @@ export const renderMainMenu = (screen: Screen, state: AppState): void => {
   const width = state.terminalSize.cols;
   let currentRow = 1;
 
-  drawHeader(screen, currentRow, width, "To-Do App");
-  currentRow += 6;
+  currentRow += drawHeader(screen, currentRow, width, "To-Do");
 
   screen.writeAt(currentRow, 1, " ".repeat(width));
   currentRow++;
@@ -106,8 +128,7 @@ export const renderCreateTodo = (screen: Screen, state: AppState): void => {
   const inputWidth = Math.min(60, width - PADDING * 2);
   let currentRow = 1;
 
-  drawHeader(screen, currentRow, width, "Create To-Do");
-  currentRow += 6;
+  currentRow += drawHeader(screen, currentRow, width, "Create");
 
   screen.writeAt(currentRow, 1, " ".repeat(width));
   currentRow++;
@@ -137,8 +158,7 @@ export const renderLoadTodo = (screen: Screen, state: AppState): void => {
   const todoCount = state.todos.length;
   let currentRow = 1;
 
-  drawHeader(screen, currentRow, width, "Load To-Do");
-  currentRow += 6;
+  currentRow += drawHeader(screen, currentRow, width, "Load");
 
   screen.writeAt(currentRow, 1, " ".repeat(width));
   currentRow++;
@@ -191,8 +211,9 @@ export const renderViewTodo = (screen: Screen, state: AppState): void => {
   const itemCount = todo.items.length;
   let currentRow = 1;
 
-  drawHeader(screen, currentRow, width, todo.title);
-  currentRow += 6;
+  const shortTitle =
+    todo.title.length > 12 ? todo.title.slice(0, 12) : todo.title;
+  currentRow += drawHeader(screen, currentRow, width, shortTitle);
 
   screen.writeAt(currentRow, 1, " ".repeat(width));
   currentRow++;
