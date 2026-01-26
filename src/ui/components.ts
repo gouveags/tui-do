@@ -10,6 +10,10 @@ export const BOX_CHARS = {
   vertical: "│",
   leftT: "├",
   rightT: "┤",
+  roundedTopLeft: "╭",
+  roundedTopRight: "╮",
+  roundedBottomLeft: "╰",
+  roundedBottomRight: "╯",
 } as const;
 
 export const drawFullWidthLine = (

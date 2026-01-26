@@ -1,4 +1,4 @@
-import { style } from "./ansi.ts";
+import { fg256, style } from "./ansi.ts";
 
 export type ThemeColors = {
   title: string;
@@ -14,6 +14,10 @@ export type ThemeColors = {
   header1: string;
   header2: string;
   header3: string;
+  accent: string;
+  inputBorder: string;
+  inputLabel: string;
+  inputText: string;
 };
 
 export type Theme = {
@@ -23,19 +27,23 @@ export type Theme = {
 
 export const defaultTheme: Theme = {
   colors: {
-    title: style.bold + style.fg.cyan,
+    title: style.bold + fg256(75),
     selected: style.inverse,
     completed: style.fg.green,
     help: style.dim,
     border: style.dim,
     cursor: style.inverse,
     error: style.fg.red,
-    bullet: style.fg.cyan,
+    bullet: fg256(75),
     quote: style.dim,
     code: style.inverse,
-    header1: style.bold + style.fg.cyan,
-    header2: style.bold + style.fg.cyan,
-    header3: style.bold + style.fg.cyan,
+    header1: style.bold + fg256(75),
+    header2: style.bold + fg256(75),
+    header3: style.bold + fg256(75),
+    accent: fg256(141),
+    inputBorder: fg256(60),
+    inputLabel: fg256(141),
+    inputText: style.reset,
   },
   reset: style.reset,
 };

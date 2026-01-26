@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { renderMarkdown } from "../../src/markdown/renderer.ts";
 import { style } from "../../src/render/ansi.ts";
+import { defaultTheme } from "../../src/render/theme.ts";
 
 describe("markdown renderer", () => {
   it("renders plain text unchanged", () => {
@@ -24,15 +25,15 @@ describe("markdown renderer", () => {
     assert.ok(result.includes(style.inverse));
   });
 
-  it("renders h1 with cyan and bold", () => {
+  it("renders h1 with header style", () => {
     const result = renderMarkdown("# Header");
     assert.ok(result.includes(style.bold));
-    assert.ok(result.includes(style.fg.cyan));
+    assert.ok(result.includes(defaultTheme.colors.header1));
   });
 
-  it("renders bullet points with cyan bullet", () => {
+  it("renders bullet points with bullet style", () => {
     const result = renderMarkdown("- item");
-    assert.ok(result.includes(style.fg.cyan));
+    assert.ok(result.includes(defaultTheme.colors.bullet));
     assert.ok(result.includes("•"));
   });
 

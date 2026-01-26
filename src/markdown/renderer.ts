@@ -48,7 +48,7 @@ const renderToken = (token: Token, width = 80): string => {
       );
     case "bullet":
       return (
-        style.fg.cyan +
+        defaultTheme.colors.bullet +
         BULLET_CHAR +
         style.reset +
         " " +

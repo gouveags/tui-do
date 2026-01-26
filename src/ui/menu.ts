@@ -103,6 +103,7 @@ export const renderMainMenu = (screen: Screen, state: AppState): void => {
 
 export const renderCreateTodo = (screen: Screen, state: AppState): void => {
   const width = state.terminalSize.cols;
+  const inputWidth = Math.min(60, width - PADDING * 2);
   let currentRow = 1;
 
   drawHeader(screen, currentRow, width, "Create To-Do");
@@ -115,14 +116,14 @@ export const renderCreateTodo = (screen: Screen, state: AppState): void => {
   drawText(screen, currentRow, PADDING, "Enter a name for your to-do:");
   currentRow += 2;
 
-  drawInputField(screen, currentRow, 1, state.input, {
-    width,
+  drawInputField(screen, currentRow, PADDING, state.input, {
+    width: inputWidth,
     label: "Name:",
     showCursor: true,
     withBorders: true,
     padding: PADDING,
   });
-  currentRow += 7;
+  currentRow += 5;
 
   drawFooter(screen, currentRow, width, [
     "[Enter] Create",
@@ -246,14 +247,15 @@ export const renderViewTodo = (screen: Screen, state: AppState): void => {
 
   currentRow++;
 
-  drawInputField(screen, currentRow, 1, state.input, {
-    width,
+  const inputWidth = Math.min(60, width - PADDING * 2);
+  drawInputField(screen, currentRow, PADDING, state.input, {
+    width: inputWidth,
     label: "Add item:",
     showCursor: true,
     withBorders: true,
     padding: PADDING,
   });
-  currentRow += 7;
+  currentRow += 5;
 
   drawFooter(screen, currentRow, width, [
     "[↑/↓] Navigate",
