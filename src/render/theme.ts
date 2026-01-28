@@ -1,4 +1,4 @@
-import { fg256, style } from "./ansi.ts";
+import { bg256, fg256, style } from "./ansi.ts";
 
 export type ThemeColors = {
   title: string;
@@ -15,6 +15,12 @@ export type ThemeColors = {
   header2: string;
   header3: string;
   accent: string;
+  statusBar: string;
+  statusBarAccent: string;
+  panelBorder: string;
+  panelTitle: string;
+  hintKey: string;
+  hintText: string;
   inputBorder: string;
   inputLabel: string;
   inputText: string;
@@ -27,22 +33,28 @@ export type Theme = {
 
 export const defaultTheme: Theme = {
   colors: {
-    title: style.bold + fg256(75),
-    selected: style.inverse,
-    completed: style.fg.green,
-    help: style.dim,
-    border: style.dim,
+    title: style.bold + fg256(81),
+    selected: style.bold + fg256(231) + bg256(24),
+    completed: fg256(70),
+    help: fg256(244),
+    border: fg256(238),
     cursor: style.inverse,
-    error: style.fg.red,
-    bullet: fg256(75),
-    quote: style.dim,
-    code: style.inverse,
-    header1: style.bold + fg256(75),
+    error: style.bold + fg256(203),
+    bullet: fg256(111),
+    quote: fg256(245),
+    code: fg256(229) + bg256(236),
+    header1: style.bold + fg256(81),
     header2: style.bold + fg256(75),
-    header3: style.bold + fg256(75),
+    header3: style.bold + fg256(69),
     accent: fg256(141),
+    statusBar: style.bold + fg256(231) + bg256(23),
+    statusBarAccent: style.bold + fg256(86) + bg256(23),
+    panelBorder: fg256(239),
+    panelTitle: style.bold + fg256(117),
+    hintKey: style.bold + fg256(229),
+    hintText: fg256(246),
     inputBorder: fg256(60),
-    inputLabel: fg256(141),
+    inputLabel: style.bold + fg256(111),
     inputText: style.reset,
   },
   reset: style.reset,

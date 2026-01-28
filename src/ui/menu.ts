@@ -1,5 +1,4 @@
 import { renderMarkdownLines } from "../markdown/renderer.ts";
-import { renderAsciiArt } from "../render/ascii-art.ts";
 import type { Screen } from "../render/screen.ts";
 import { defaultTheme } from "../render/theme.ts";
 import { getFilteredTodos } from "../state/app.ts";
@@ -7,11 +6,14 @@ import type { AppState } from "../state/types.ts";
 import { formatDate } from "../utils/date.ts";
 import { dateFilterLabel } from "../utils/search.ts";
 import {
-  BOX_CHARS,
   drawCompletedItem,
+  drawFullWidthLine,
   drawHelp,
   drawHighlightedText,
+  drawHintLine,
   drawMenuItem,
+  drawSectionHeader,
+  drawStatusBar,
   drawText,
 } from "./components.ts";
 import { drawInputField, getInputFieldHeight } from "./input-field.ts";
@@ -19,54 +21,52 @@ import { drawInputField, getInputFieldHeight } from "./input-field.ts";
 const MAIN_MENU_ITEMS = ["Create a new to-do", "Load a to-do", "Quit"];
 
 const PADDING = 4;
-const HEADER_HEIGHT = 7;
+const STATUS_BAR_HEIGHT = 2;
 
-const drawHeader = (
-  screen: Screen,
-  row: number,
-  width: number,
-  title: string,
-  useAsciiArt = true,
-): number => {
-  screen.writeStyled(
-    row,
-    1,
-    defaultTheme.colors.border,
-    BOX_CHARS.horizontal.repeat(width),
-  );
+const truncate = (text: string, maxLength: number): string => {
+  if (maxLength <= 0) return "";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(1, maxLength - 1))}…`;
+};
 
-  if (useAsciiArt) {
-    const artLines = renderAsciiArt(title);
-    screen.writeAt(row + 1, 1, " ".repeat(width));
-    for (let i = 0; i < artLines.length; i++) {
-      screen.writeAt(row + 2 + i, 1, " ".repeat(width));
-      screen.writeStyled(
-        row + 2 + i,
-        PADDING,
-        defaultTheme.colors.title,
-        artLines[i] ?? "",
-      );
-    }
-    screen.writeAt(row + 5, 1, " ".repeat(width));
-    screen.writeStyled(
-      row + 6,
-      1,
-      defaultTheme.colors.border,
-      BOX_CHARS.horizontal.repeat(width),
-    );
-    return HEADER_HEIGHT;
+const getViewLabel = (state: AppState): string => {
+  switch (state.view) {
+    case "main_menu":
+      return "Launch";
+    case "create_todo":
+      return "Create";
+    case "load_todo":
+      return "Load";
+    case "search_todo":
+      return "Search";
+    case "view_todo":
+      return "Focus";
+    default:
+      return "Session";
+  }
+};
+
+const drawTopBar = (screen: Screen, state: AppState, width: number): number => {
+  const cwdParts = process.cwd().split("/");
+  const projectName = cwdParts[cwdParts.length - 1] || "workspace";
+  const viewLabel = getViewLabel(state);
+  const baseLeft = `To-Do TUI`;
+  const baseRight = `view: ${viewLabel}  •  project: ${projectName}`;
+
+  const available = width - 2;
+  let leftText = baseLeft;
+  let rightText = baseRight;
+
+  if (leftText.length + rightText.length > available) {
+    const maxRight = Math.max(12, Math.floor(available * 0.55));
+    rightText = truncate(rightText, maxRight);
+    const maxLeft = Math.max(8, available - rightText.length - 1);
+    leftText = truncate(leftText, maxLeft);
   }
 
-  screen.writeAt(row + 1, 1, " ".repeat(width));
-  screen.writeStyled(row + 2, PADDING, defaultTheme.colors.title, title);
-  screen.writeAt(row + 3, 1, " ".repeat(width));
-  screen.writeStyled(
-    row + 4,
-    1,
-    defaultTheme.colors.border,
-    BOX_CHARS.horizontal.repeat(width),
-  );
-  return 5;
+  drawStatusBar(screen, 1, width, leftText, rightText);
+  drawFullWidthLine(screen, 2, width, defaultTheme);
+  return STATUS_BAR_HEIGHT;
 };
 
 const drawFooter = (
@@ -76,17 +76,12 @@ const drawFooter = (
   helpTexts: string[],
   tip?: string,
 ): void => {
-  screen.writeStyled(
-    row,
-    1,
-    defaultTheme.colors.border,
-    BOX_CHARS.horizontal.repeat(width),
-  );
+  drawFullWidthLine(screen, row, width, defaultTheme);
 
   screen.writeAt(row + 1, 1, " ".repeat(width));
 
   const helpLine = helpTexts.join("   ");
-  screen.writeStyled(row + 2, PADDING, defaultTheme.colors.help, helpLine);
+  drawHintLine(screen, row + 2, PADDING, helpLine, defaultTheme);
 
   if (tip) {
     screen.writeAt(row + 3, 1, " ".repeat(width));
@@ -102,9 +97,15 @@ const drawFooter = (
 
 export const renderMainMenu = (screen: Screen, state: AppState): void => {
   const width = state.terminalSize.cols;
-  let currentRow = 1;
+  let currentRow = 1 + drawTopBar(screen, state, width);
 
-  currentRow += drawHeader(screen, currentRow, width, "To-Do");
+  currentRow += drawSectionHeader(
+    screen,
+    currentRow,
+    width,
+    "Welcome to To-Do",
+    "Type a command or pick a task list to get started.",
+  );
 
   screen.writeAt(currentRow, 1, " ".repeat(width));
   currentRow++;
@@ -142,15 +143,21 @@ export const renderCreateTodo = (screen: Screen, state: AppState): void => {
   const width = state.terminalSize.cols;
   const inputWidth = width - PADDING;
   const maxInputLines = state.terminalSize.rows - 18;
-  let currentRow = 1;
+  let currentRow = 1 + drawTopBar(screen, state, width);
 
-  currentRow += drawHeader(screen, currentRow, width, "Create");
+  currentRow += drawSectionHeader(
+    screen,
+    currentRow,
+    width,
+    "Create a new list",
+    "Keep titles short, clear, and action-ready.",
+  );
 
   screen.writeAt(currentRow, 1, " ".repeat(width));
   currentRow++;
 
   screen.writeAt(currentRow, 1, " ".repeat(width));
-  drawText(screen, currentRow, PADDING, "Enter a name for your to-do:");
+  drawText(screen, currentRow, PADDING, "Enter a name for your to-do list:");
   currentRow += 2;
 
   drawInputField(screen, currentRow, PADDING, state.input, {
@@ -180,9 +187,15 @@ export const renderCreateTodo = (screen: Screen, state: AppState): void => {
 export const renderLoadTodo = (screen: Screen, state: AppState): void => {
   const width = state.terminalSize.cols;
   const todoCount = state.todos.length;
-  let currentRow = 1;
+  let currentRow = 1 + drawTopBar(screen, state, width);
 
-  currentRow += drawHeader(screen, currentRow, width, "Load");
+  currentRow += drawSectionHeader(
+    screen,
+    currentRow,
+    width,
+    "Load a list",
+    `${todoCount} list${todoCount === 1 ? "" : "s"} found.`,
+  );
 
   screen.writeAt(currentRow, 1, " ".repeat(width));
   currentRow++;
@@ -237,11 +250,23 @@ export const renderViewTodo = (screen: Screen, state: AppState): void => {
 
   const width = state.terminalSize.cols;
   const itemCount = todo.items.length;
+  const doneCount = todo.items.filter((it) => it.done).length;
   let currentRow = 1;
 
-  const shortTitle =
-    todo.title.length > 12 ? todo.title.slice(0, 12) : todo.title;
-  currentRow += drawHeader(screen, currentRow, width, shortTitle);
+  currentRow += drawTopBar(screen, state, width);
+
+  const headerTitle =
+    todo.title.length > 28 ? `${todo.title.slice(0, 27)}…` : todo.title;
+  const subtitle = `${doneCount}/${itemCount} done  •  updated ${formatDate(
+    todo.updatedAt,
+  )}`;
+  currentRow += drawSectionHeader(
+    screen,
+    currentRow,
+    width,
+    headerTitle,
+    subtitle,
+  );
 
   screen.writeAt(currentRow, 1, " ".repeat(width));
   currentRow++;
@@ -314,7 +339,7 @@ export const renderViewTodo = (screen: Screen, state: AppState): void => {
   );
 
   const MIT_TIP =
-    "MIT Tip: Focus on your top 3 tasks - they're your Most Important Tasks.";
+    "MIT Tip: Focus on your top 3 tasks — they’re your Most Important Tasks.";
   drawFooter(
     screen,
     currentRow,
@@ -332,9 +357,15 @@ export const renderViewTodo = (screen: Screen, state: AppState): void => {
 
 export const renderSearchTodo = (screen: Screen, state: AppState): void => {
   const width = state.terminalSize.cols;
-  let currentRow = 1;
+  let currentRow = 1 + drawTopBar(screen, state, width);
 
-  currentRow += drawHeader(screen, currentRow, width, "Search");
+  currentRow += drawSectionHeader(
+    screen,
+    currentRow,
+    width,
+    "Search lists",
+    "Filter by title, then open with Enter.",
+  );
 
   screen.writeAt(currentRow, 1, " ".repeat(width));
   currentRow++;
