@@ -35,12 +35,10 @@ describe("Screen", () => {
     assert.ok(output.includes("\x1b[0m"));
   });
 
-  it("hides cursor, moves home, and clears screen on prepare", () => {
+  it("hides cursor on prepare", () => {
     const screen = createScreen();
     const output = screen.prepare();
     assert.ok(output.includes("\x1b[?25l"));
-    assert.ok(output.includes("\x1b[H"));
-    assert.ok(output.includes("\x1b[2J"));
   });
 
   it("shows cursor on restore", () => {

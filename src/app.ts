@@ -135,7 +135,7 @@ export const runApp = (): void => {
   const todos = listTodos();
   const terminalSize = getTerminalSize();
   let state: AppState = { ...createInitialState(), todos, terminalSize };
-  const scr = createScreen();
+  const scr = createScreen(terminalSize);
   let stopListener: (() => void) | null = null;
 
   const renderFrame = () => {
@@ -158,6 +158,7 @@ export const runApp = (): void => {
 
   const handleResize = () => {
     const newSize = getTerminalSize();
+    scr.setSize(newSize);
     state = transition(state, {
       type: "RESIZE",
       rows: newSize.rows,
