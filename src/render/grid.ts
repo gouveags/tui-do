@@ -41,11 +41,11 @@ export const setCell = (
     return;
   }
   const idx = row * grid.width + col;
-  grid.cells[idx].ch = cell.ch;
-  grid.cells[idx].style = cell.style;
+  grid.cells[idx]!.ch = cell.ch;
+  grid.cells[idx]!.style = cell.style;
 };
 
 export const getCell = (grid: Grid, row: number, col: number): Cell => {
   const idx = row * grid.width + col;
-  return grid.cells[idx];
+  return grid.cells[idx]!;
 };
