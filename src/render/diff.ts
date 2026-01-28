@@ -9,6 +9,7 @@ export const diffGrids = (prev: Grid, next: Grid): string => {
 
   const buf = createBuffer(4096);
   let hasChanges = false;
+  let lastStyle = styleCodes.reset;
 
   for (let row = 0; row < next.height; row++) {
     let col = 0;
@@ -41,14 +42,18 @@ export const diffGrids = (prev: Grid, next: Grid): string => {
         col += 1;
       }
 
+      const nextStyle = runStyle.length > 0 ? runStyle : styleCodes.reset;
       buf.write(cursor.moveTo(row + 1, startCol + 1));
-      buf.write(runStyle.length > 0 ? runStyle : styleCodes.reset);
+      if (nextStyle !== lastStyle) {
+        buf.write(nextStyle);
+        lastStyle = nextStyle;
+      }
       buf.write(text);
       hasChanges = true;
     }
   }
 
-  if (hasChanges) {
+  if (hasChanges && lastStyle !== styleCodes.reset) {
     buf.write(styleCodes.reset);
   }
 
