@@ -3,6 +3,7 @@ import { createBuffer } from "./buffer.ts";
 import type { Grid } from "./grid.ts";
 
 export const diffGrids = (prev: Grid, next: Grid): string => {
+  const PLACEHOLDER_CHAR = "\u0000";
   if (prev.width !== next.width || prev.height !== next.height) {
     throw new Error("Grid sizes must match for diffing.");
   }
@@ -24,6 +25,10 @@ export const diffGrids = (prev: Grid, next: Grid): string => {
         col += 1;
         continue;
       }
+      if (nextCell.ch === PLACEHOLDER_CHAR) {
+        col += 1;
+        continue;
+      }
 
       const startCol = col;
       const runStyle = nextCell.style;
@@ -33,6 +38,9 @@ export const diffGrids = (prev: Grid, next: Grid): string => {
         const runIdx = row * next.width + col;
         const runPrev = prev.cells[runIdx];
         const runNext = next.cells[runIdx];
+        if (runNext.ch === PLACEHOLDER_CHAR) {
+          break;
+        }
         const runChanged =
           runPrev.ch !== runNext.ch || runPrev.style !== runNext.style;
         if (!runChanged || runNext.style !== runStyle) {
@@ -42,7 +50,10 @@ export const diffGrids = (prev: Grid, next: Grid): string => {
         col += 1;
       }
 
-      const nextStyle = runStyle.length > 0 ? runStyle : styleCodes.reset;
+      const nextStyle =
+        runStyle.length > 0
+          ? `${styleCodes.reset}${runStyle}`
+          : styleCodes.reset;
       buf.write(cursor.moveTo(row + 1, startCol + 1));
       if (nextStyle !== lastStyle) {
         buf.write(nextStyle);

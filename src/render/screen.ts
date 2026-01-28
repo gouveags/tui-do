@@ -1,6 +1,7 @@
 import { cursor, screen as screenCodes } from "./ansi.ts";
 import { diffGrids } from "./diff.ts";
-import { clearGrid, createGrid, setCell } from "./grid.ts";
+import { clearGrid, createGrid, getCell, setCell } from "./grid.ts";
+import { charWidth } from "./width.ts";
 
 export type TerminalSize = {
   rows: number;
@@ -21,7 +22,8 @@ export type Screen = {
   setSize: (size: TerminalSize) => void;
 };
 
-const splitText = (text: string): string[] => [...text];
+const splitText = (text: string): string[] => Array.from(text);
+const PLACEHOLDER_CHAR = "\u0000";
 
 export const createScreen = (
   initialSize: TerminalSize = getTerminalSize(),
@@ -34,16 +36,48 @@ export const createScreen = (
   return {
     writeAt(row, col, text) {
       let currentCol = col;
+      let lastCellCol = col - 1;
       for (const ch of splitText(text)) {
+        const width = charWidth(ch);
+        if (width === 0) {
+          if (lastCellCol >= 0) {
+            const cell = getCell(nextGrid, row - 1, lastCellCol);
+            cell.ch += ch;
+          }
+          continue;
+        }
         setCell(nextGrid, row - 1, currentCol - 1, { ch, style: "" });
-        currentCol += 1;
+        lastCellCol = currentCol - 1;
+        if (width === 2) {
+          setCell(nextGrid, row - 1, currentCol, {
+            ch: PLACEHOLDER_CHAR,
+            style: "",
+          });
+        }
+        currentCol += width;
       }
     },
     writeStyled(row, col, styles, text) {
       let currentCol = col;
+      let lastCellCol = col - 1;
       for (const ch of splitText(text)) {
+        const width = charWidth(ch);
+        if (width === 0) {
+          if (lastCellCol >= 0) {
+            const cell = getCell(nextGrid, row - 1, lastCellCol);
+            cell.ch += ch;
+          }
+          continue;
+        }
         setCell(nextGrid, row - 1, currentCol - 1, { ch, style: styles });
-        currentCol += 1;
+        lastCellCol = currentCol - 1;
+        if (width === 2) {
+          setCell(nextGrid, row - 1, currentCol, {
+            ch: PLACEHOLDER_CHAR,
+            style: "",
+          });
+        }
+        currentCol += width;
       }
     },
     flush() {
