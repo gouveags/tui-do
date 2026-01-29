@@ -12,6 +12,7 @@ import {
   drawHelp,
   drawHighlightedText,
   drawHintLine,
+  drawMenuItem,
   drawSectionHeader,
   drawStatusBar,
   drawText,
@@ -357,14 +358,15 @@ export const renderLoadTodo = (screen: Screen, state: AppState): void => {
 };
 
 const renderModal = (screen: Screen, state: AppState): void => {
-  if (!state.modal) return;
+  const modal = state.modal;
+  if (!modal) return;
   const width = state.terminalSize.cols;
   const height = state.terminalSize.rows;
   const boxWidth = Math.min(70, width - 4);
   const contentWidth = boxWidth - MODAL_PADDING * 2;
   let boxHeight = 9;
 
-  if (state.modal.type === "rename") {
+  if (modal.type === "rename") {
     const renameLabel = "Name:";
     const inputHeight = getInputFieldHeight(
       state.modalInput,
@@ -384,14 +386,14 @@ const renderModal = (screen: Screen, state: AppState): void => {
   const textRow = startRow + 2;
   const textCol = startCol + MODAL_PADDING;
 
-  if (state.modal.type === "confirm_delete") {
+  if (modal.type === "confirm_delete") {
     const todoNames = state.todos
-      .filter((todo) => state.modal?.todoIds.includes(todo.id))
+      .filter((todo) => modal.todoIds.includes(todo.id))
       .map((todo) => todo.title);
     const header =
-      state.modal.todoIds.length === 1
+      modal.todoIds.length === 1
         ? `Delete "${todoNames[0] ?? "this list"}"?`
-        : `Delete ${state.modal.todoIds.length} lists?`;
+        : `Delete ${modal.todoIds.length} lists?`;
     drawText(screen, textRow, textCol, header, contentWidth);
     drawHelp(
       screen,
@@ -408,8 +410,8 @@ const renderModal = (screen: Screen, state: AppState): void => {
     return;
   }
 
-  if (state.modal.type === "rename") {
-    const todo = state.todos.find((t) => t.id === state.modal?.todoId);
+  if (modal.type === "rename") {
+    const todo = state.todos.find((t) => t.id === modal.todoId);
     drawText(
       screen,
       textRow,
