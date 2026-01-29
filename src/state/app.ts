@@ -604,14 +604,15 @@ export const transition = (state: AppState, action: Action): AppState => {
     };
   }
 
-  if (state.modal) {
+  const modal = state.modal;
+  if (modal) {
     if (action.type === "CANCEL_MODAL") {
       return closeModal(state);
     }
     if (action.type === "CONFIRM_MODAL") {
-      if (state.modal.type === "confirm_delete") {
+      if (modal.type === "confirm_delete") {
         const remainingTodos = state.todos.filter(
-          (todo) => !state.modal?.todoIds.includes(todo.id),
+          (todo) => !modal.todoIds.includes(todo.id),
         );
         const menuIndex = Math.min(
           state.menuIndex,
@@ -620,9 +621,7 @@ export const transition = (state: AppState, action: Action): AppState => {
         return closeModal({
           ...state,
           todos: remainingTodos,
-          selectedTodoId: state.modal.todoIds.includes(
-            state.selectedTodoId ?? "",
-          )
+          selectedTodoId: modal.todoIds.includes(state.selectedTodoId ?? "")
             ? null
             : state.selectedTodoId,
           menuIndex,
@@ -630,19 +629,19 @@ export const transition = (state: AppState, action: Action): AppState => {
           selectedTodoIds: [],
         });
       }
-      if (state.modal.type === "rename") {
+      if (modal.type === "rename") {
         const newTitle = state.modalInputBuffer.trim();
         if (!newTitle) return closeModal(state);
         const now = Date.now();
         const updatedTodos = state.todos.map((todo) =>
-          todo.id === state.modal?.todoId
+          todo.id === modal.todoId
             ? { ...todo, title: newTitle, updatedAt: now }
             : todo,
         );
         return closeModal({ ...state, todos: updatedTodos });
       }
     }
-    if (state.modal.type === "rename") {
+    if (modal.type === "rename") {
       const inputResult = handleModalInputAction(state, action);
       if (inputResult) return inputResult;
     }
