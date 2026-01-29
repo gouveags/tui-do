@@ -31,13 +31,33 @@ describe("parseKey", () => {
     });
   });
 
-  it("parses Enter key", () => {
+  it("parses Enter key (CR)", () => {
     const key = parseKey(Buffer.from("\r"));
     assert.deepStrictEqual(key, {
       name: "enter",
       ctrl: false,
       shift: false,
       sequence: "\r",
+    });
+  });
+
+  it("parses Enter key (LF) for Windows compatibility", () => {
+    const key = parseKey(Buffer.from("\n"));
+    assert.deepStrictEqual(key, {
+      name: "enter",
+      ctrl: false,
+      shift: false,
+      sequence: "\n",
+    });
+  });
+
+  it("parses Enter key (CR+LF) for Windows compatibility", () => {
+    const key = parseKey(Buffer.from("\r\n"));
+    assert.deepStrictEqual(key, {
+      name: "enter",
+      ctrl: false,
+      shift: false,
+      sequence: "\r\n",
     });
   });
 
@@ -164,5 +184,168 @@ describe("parseKey", () => {
   it("returns unknown for unrecognized sequences", () => {
     const key = parseKey(Buffer.from("\x1b[Z"));
     assert.strictEqual(key.name, "unknown");
+  });
+
+  // Kitty keyboard protocol CSI u format tests
+  describe("Kitty protocol CSI u format", () => {
+    it("parses escape key in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[27u"));
+      assert.deepStrictEqual(key, {
+        name: "escape",
+        ctrl: false,
+        shift: false,
+        sequence: "\x1b[27u",
+      });
+    });
+
+    it("parses escape key with modifier in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[27;1u"));
+      assert.deepStrictEqual(key, {
+        name: "escape",
+        ctrl: false,
+        shift: false,
+        sequence: "\x1b[27;1u",
+      });
+    });
+
+    it("parses up arrow in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[57352u"));
+      assert.deepStrictEqual(key, {
+        name: "up",
+        ctrl: false,
+        shift: false,
+        sequence: "\x1b[57352u",
+      });
+    });
+
+    it("parses down arrow in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[57353u"));
+      assert.deepStrictEqual(key, {
+        name: "down",
+        ctrl: false,
+        shift: false,
+        sequence: "\x1b[57353u",
+      });
+    });
+
+    it("parses left arrow in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[57350u"));
+      assert.deepStrictEqual(key, {
+        name: "left",
+        ctrl: false,
+        shift: false,
+        sequence: "\x1b[57350u",
+      });
+    });
+
+    it("parses right arrow in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[57351u"));
+      assert.deepStrictEqual(key, {
+        name: "right",
+        ctrl: false,
+        shift: false,
+        sequence: "\x1b[57351u",
+      });
+    });
+
+    it("parses enter in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[13u"));
+      assert.deepStrictEqual(key, {
+        name: "enter",
+        ctrl: false,
+        shift: false,
+        sequence: "\x1b[13u",
+      });
+    });
+
+    it("parses shift+enter in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[13;2u"));
+      assert.deepStrictEqual(key, {
+        name: "shift-enter",
+        ctrl: false,
+        shift: true,
+        sequence: "\x1b[13;2u",
+      });
+    });
+
+    it("parses ctrl+c in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[99;5u"));
+      assert.deepStrictEqual(key, {
+        name: "c",
+        ctrl: true,
+        shift: false,
+        sequence: "\x1b[99;5u",
+      });
+    });
+
+    it("parses ctrl+up in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[57352;5u"));
+      assert.deepStrictEqual(key, {
+        name: "ctrl-up",
+        ctrl: true,
+        shift: false,
+        sequence: "\x1b[57352;5u",
+      });
+    });
+
+    it("parses ctrl+down in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[57353;5u"));
+      assert.deepStrictEqual(key, {
+        name: "ctrl-down",
+        ctrl: true,
+        shift: false,
+        sequence: "\x1b[57353;5u",
+      });
+    });
+
+    it("parses backspace in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[127u"));
+      assert.deepStrictEqual(key, {
+        name: "backspace",
+        ctrl: false,
+        shift: false,
+        sequence: "\x1b[127u",
+      });
+    });
+
+    it("parses delete in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[57359u"));
+      assert.deepStrictEqual(key, {
+        name: "delete",
+        ctrl: false,
+        shift: false,
+        sequence: "\x1b[57359u",
+      });
+    });
+
+    it("parses home in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[57356u"));
+      assert.deepStrictEqual(key, {
+        name: "home",
+        ctrl: false,
+        shift: false,
+        sequence: "\x1b[57356u",
+      });
+    });
+
+    it("parses end in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[57357u"));
+      assert.deepStrictEqual(key, {
+        name: "end",
+        ctrl: false,
+        shift: false,
+        sequence: "\x1b[57357u",
+      });
+    });
+
+    it("parses tab in CSI u format", () => {
+      const key = parseKey(Buffer.from("\x1b[9u"));
+      assert.deepStrictEqual(key, {
+        name: "tab",
+        ctrl: false,
+        shift: false,
+        sequence: "\x1b[9u",
+      });
+    });
   });
 });
