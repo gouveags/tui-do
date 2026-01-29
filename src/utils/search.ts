@@ -35,6 +35,23 @@ export const fuzzyScore = (query: string, text: string): number => {
   return score;
 };
 
+export const fuzzyMatchIndices = (query: string, text: string): number[] => {
+  const q = query.toLowerCase().trim();
+  if (!q) return [];
+  const t = text.toLowerCase();
+  let qi = 0;
+  const matches: number[] = [];
+
+  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
+    if (t[ti] === q[qi]) {
+      matches.push(ti);
+      qi++;
+    }
+  }
+
+  return qi === q.length ? matches : [];
+};
+
 export const filterTodos = (
   entries: TodoIndexEntry[],
   query: string,

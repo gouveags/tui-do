@@ -1,17 +1,17 @@
 import { renderMarkdownLines } from "../markdown/renderer.ts";
 import type { Screen } from "../render/screen.ts";
 import { defaultTheme } from "../render/theme.ts";
-import { getFilteredTodos } from "../state/app.ts";
-import type { AppState } from "../state/types.ts";
+import { getVisibleTodos } from "../state/app.ts";
+import type { AppState, Todo } from "../state/types.ts";
 import { formatDate } from "../utils/date.ts";
-import { dateFilterLabel } from "../utils/search.ts";
+import { dateFilterLabel, fuzzyMatchIndices } from "../utils/search.ts";
 import {
+  drawBox,
   drawCompletedItem,
   drawFullWidthLine,
   drawHelp,
   drawHighlightedText,
   drawHintLine,
-  drawMenuItem,
   drawSectionHeader,
   drawStatusBar,
   drawText,
@@ -22,11 +22,24 @@ const MAIN_MENU_ITEMS = ["Create a new to-do", "Load a to-do", "Quit"];
 
 const PADDING = 4;
 const STATUS_BAR_HEIGHT = 2;
+const MODAL_PADDING = 2;
 
 const truncate = (text: string, maxLength: number): string => {
   if (maxLength <= 0) return "";
   if (text.length <= maxLength) return text;
   return `${text.slice(0, Math.max(1, maxLength - 1))}…`;
+};
+
+const getTodoSummary = (
+  todos: Todo[],
+): { totalLists: number; totalItems: number; doneItems: number } => {
+  let totalItems = 0;
+  let doneItems = 0;
+  for (const todo of todos) {
+    totalItems += todo.items.length;
+    doneItems += todo.items.filter((item) => item.done).length;
+  }
+  return { totalLists: todos.length, totalItems, doneItems };
 };
 
 const getViewLabel = (state: AppState): string => {
@@ -67,6 +80,78 @@ const drawTopBar = (screen: Screen, state: AppState, width: number): number => {
   drawStatusBar(screen, 1, width, leftText, rightText);
   drawFullWidthLine(screen, 2, width, defaultTheme);
   return STATUS_BAR_HEIGHT;
+};
+
+const drawTodoListItem = (
+  screen: Screen,
+  row: number,
+  col: number,
+  width: number,
+  entry: {
+    id: string;
+    title: string;
+    createdAt: number;
+    updatedAt: number;
+    itemCount: number;
+    doneCount: number;
+  },
+  selected: boolean,
+  selectionMode: boolean,
+  isSelected: boolean,
+  matchQuery: string,
+): void => {
+  const bullet = selected ? "▸" : "•";
+  const selectionMarker = selectionMode ? (isSelected ? "[x]" : "[ ]") : "";
+  const prefix = ` ${bullet} ${selectionMarker ? `${selectionMarker} ` : ""}`;
+
+  const baseSuffix = ` (${entry.doneCount}/${entry.itemCount})`;
+  const updatedSuffix = `${baseSuffix} • updated ${formatDate(entry.updatedAt)}`;
+  const fullSuffix = `${updatedSuffix} • created ${formatDate(entry.createdAt)}`;
+
+  let suffix = fullSuffix;
+  const maxSuffixWidth = Math.max(0, width - prefix.length - 1);
+  if (suffix.length > maxSuffixWidth) suffix = updatedSuffix;
+  if (suffix.length > maxSuffixWidth) suffix = baseSuffix;
+
+  const maxTitleLen = Math.max(1, width - prefix.length - suffix.length);
+  const title = truncate(entry.title, maxTitleLen);
+  const content = `${prefix}${title}${suffix}`.slice(0, width);
+  const padded = content.padEnd(width);
+
+  if (selected) {
+    drawHighlightedText(screen, row, col, padded, true);
+    return;
+  }
+
+  screen.writeAt(row, col, padded);
+  screen.writeStyled(row, col + 1, defaultTheme.colors.bullet, bullet);
+
+  if (selectionMarker) {
+    const selectionOffset = prefix.indexOf(selectionMarker);
+    if (selectionOffset >= 0) {
+      screen.writeStyled(
+        row,
+        col + selectionOffset,
+        defaultTheme.colors.accent,
+        selectionMarker,
+      );
+    }
+  }
+
+  const matches = fuzzyMatchIndices(matchQuery, title);
+  if (matches.length > 0) {
+    const titleOffset = col + prefix.length;
+    for (const idx of matches) {
+      const char = title[idx];
+      if (!char) continue;
+      screen.writeStyled(
+        row,
+        titleOffset + idx,
+        defaultTheme.colors.match,
+        char,
+      );
+    }
+  }
 };
 
 const drawFooter = (
@@ -186,7 +271,9 @@ export const renderCreateTodo = (screen: Screen, state: AppState): void => {
 
 export const renderLoadTodo = (screen: Screen, state: AppState): void => {
   const width = state.terminalSize.cols;
-  const todoCount = state.todos.length;
+  const { totalLists, totalItems, doneItems } = getTodoSummary(state.todos);
+  const entries = getVisibleTodos(state, "");
+  const todoCount = entries.length;
   let currentRow = 1 + drawTopBar(screen, state, width);
 
   currentRow += drawSectionHeader(
@@ -194,11 +281,33 @@ export const renderLoadTodo = (screen: Screen, state: AppState): void => {
     currentRow,
     width,
     "Load a list",
-    `${todoCount} list${todoCount === 1 ? "" : "s"} found.`,
+    `${todoCount} of ${totalLists} list${totalLists === 1 ? "" : "s"} • ${doneItems}/${totalItems} items done`,
   );
 
   screen.writeAt(currentRow, 1, " ".repeat(width));
   currentRow++;
+
+  screen.writeAt(currentRow, 1, " ".repeat(width));
+  drawHelp(
+    screen,
+    currentRow,
+    PADDING,
+    `Filters: Date = ${dateFilterLabel(state.dateFilter)} • Query = ${
+      state.searchQuery ? `"${state.searchQuery}"` : "—"
+    }`,
+  );
+  currentRow += 2;
+
+  if (state.selectionMode) {
+    screen.writeAt(currentRow, 1, " ".repeat(width));
+    drawHelp(
+      screen,
+      currentRow,
+      PADDING,
+      `Selection mode: ${state.selectedTodoIds.length} selected`,
+    );
+    currentRow += 2;
+  }
 
   if (todoCount === 0) {
     screen.writeAt(currentRow, 1, " ".repeat(width));
@@ -209,27 +318,20 @@ export const renderLoadTodo = (screen: Screen, state: AppState): void => {
     const startIdx = Math.max(0, state.menuIndex - maxVisible + 1);
 
     for (let i = 0; i < maxVisible && startIdx + i < todoCount; i++) {
-      const todo = state.todos[startIdx + i];
-      if (todo) {
-        const doneCount = todo.items.filter((it) => it.done).length;
-        const dateStr = formatDate(todo.createdAt);
-        const suffix = ` (${doneCount}/${todo.items.length}) - ${dateStr}`;
-        const availableWidth = width - PADDING * 2 - 4;
-        const maxTitleLen = availableWidth - suffix.length;
-        const title =
-          todo.title.length > maxTitleLen
-            ? `${todo.title.slice(0, maxTitleLen - 1)}…`
-            : todo.title;
-        const label = `${title}${suffix}`;
-
+      const entry = entries[startIdx + i];
+      if (entry) {
+        const isSelected = state.selectedTodoIds.includes(entry.id);
         screen.writeAt(currentRow, 1, " ".repeat(width));
-        drawMenuItem(
+        drawTodoListItem(
           screen,
           currentRow,
           PADDING,
-          label,
-          startIdx + i === state.menuIndex,
           width - PADDING * 2,
+          entry,
+          startIdx + i === state.menuIndex,
+          state.selectionMode,
+          isSelected,
+          "",
         );
         currentRow++;
 
@@ -241,14 +343,92 @@ export const renderLoadTodo = (screen: Screen, state: AppState): void => {
 
   currentRow++;
 
-  const filterText = `[F] Filter: ${dateFilterLabel(state.dateFilter)}`;
+  const filterText = `[Ctrl+F] Filter: ${dateFilterLabel(state.dateFilter)}`;
   drawFooter(screen, currentRow, width, [
     "[↑/↓] Navigate",
-    "[Enter] Select",
+    state.selectionMode ? "[Enter] Toggle select" : "[Enter] Select",
     "[/] Search",
+    "[M] Multi-select",
+    "[D] Delete",
+    "[R] Rename",
     filterText,
     "[ESC] Back",
   ]);
+};
+
+const renderModal = (screen: Screen, state: AppState): void => {
+  if (!state.modal) return;
+  const width = state.terminalSize.cols;
+  const height = state.terminalSize.rows;
+  const boxWidth = Math.min(70, width - 4);
+  const contentWidth = boxWidth - MODAL_PADDING * 2;
+  let boxHeight = 9;
+
+  if (state.modal.type === "rename") {
+    const renameLabel = "Name:";
+    const inputHeight = getInputFieldHeight(
+      state.modalInput,
+      1,
+      true,
+      contentWidth - 2,
+      renameLabel.length + 1,
+    );
+    boxHeight = Math.max(10, inputHeight + 6);
+  }
+
+  const startRow = Math.max(2, Math.floor((height - boxHeight) / 2));
+  const startCol = Math.max(2, Math.floor((width - boxWidth) / 2));
+
+  drawBox(screen, startRow, startCol, boxWidth, boxHeight, "Confirm");
+
+  const textRow = startRow + 2;
+  const textCol = startCol + MODAL_PADDING;
+
+  if (state.modal.type === "confirm_delete") {
+    const todoNames = state.todos
+      .filter((todo) => state.modal?.todoIds.includes(todo.id))
+      .map((todo) => todo.title);
+    const header =
+      state.modal.todoIds.length === 1
+        ? `Delete "${todoNames[0] ?? "this list"}"?`
+        : `Delete ${state.modal.todoIds.length} lists?`;
+    drawText(screen, textRow, textCol, header, contentWidth);
+    drawHelp(
+      screen,
+      textRow + 2,
+      textCol,
+      "This action is permanent and cannot be undone.",
+    );
+    drawHintLine(
+      screen,
+      textRow + 4,
+      textCol,
+      "[Enter] Confirm   [ESC] Cancel",
+    );
+    return;
+  }
+
+  if (state.modal.type === "rename") {
+    const todo = state.todos.find((t) => t.id === state.modal?.todoId);
+    drawText(
+      screen,
+      textRow,
+      textCol,
+      `Rename "${todo?.title ?? "list"}":`,
+      contentWidth,
+    );
+    const inputRow = textRow + 2;
+    const renameLabel = "Name:";
+    drawInputField(screen, inputRow, textCol, state.modalInput, {
+      width: contentWidth,
+      maxLines: 1,
+      label: renameLabel,
+      showCursor: true,
+      withBorders: true,
+      padding: 2,
+    });
+    drawHintLine(screen, inputRow + 4, textCol, "[Enter] Save   [ESC] Cancel");
+  }
 };
 
 export const renderViewTodo = (screen: Screen, state: AppState): void => {
@@ -378,21 +558,50 @@ export const renderSearchTodo = (screen: Screen, state: AppState): void => {
   currentRow++;
 
   const inputWidth = width - PADDING;
+  const searchLabel = "Search:";
   drawInputField(screen, currentRow, PADDING, state.input, {
     width: inputWidth,
     maxLines: 1,
-    label: "Search:",
+    label: searchLabel,
     showCursor: true,
     withBorders: true,
     padding: PADDING,
   });
-  currentRow += 4;
+  currentRow += getInputFieldHeight(
+    state.input,
+    1,
+    true,
+    inputWidth - PADDING * 2 - 2,
+    searchLabel.length + 1,
+  );
 
   screen.writeAt(currentRow, 1, " ".repeat(width));
   currentRow++;
 
-  const { filteredTodos } = getFilteredTodos(state);
-  const resultCount = filteredTodos.length;
+  screen.writeAt(currentRow, 1, " ".repeat(width));
+  drawHelp(
+    screen,
+    currentRow,
+    PADDING,
+    `Filters: Date = ${dateFilterLabel(state.dateFilter)} • Query = ${
+      state.searchQuery ? `"${state.searchQuery}"` : "—"
+    }`,
+  );
+  currentRow += 2;
+
+  if (state.selectionMode) {
+    screen.writeAt(currentRow, 1, " ".repeat(width));
+    drawHelp(
+      screen,
+      currentRow,
+      PADDING,
+      `Selection mode: ${state.selectedTodoIds.length} selected`,
+    );
+    currentRow += 2;
+  }
+
+  const entries = getVisibleTodos(state);
+  const resultCount = entries.length;
 
   if (resultCount === 0) {
     screen.writeAt(currentRow, 1, " ".repeat(width));
@@ -408,28 +617,21 @@ export const renderSearchTodo = (screen: Screen, state: AppState): void => {
     const startIdx = Math.max(0, state.menuIndex - maxVisible + 1);
 
     for (let i = 0; i < maxVisible && startIdx + i < resultCount; i++) {
-      const entry = filteredTodos[startIdx + i];
+      const entry = entries[startIdx + i];
       if (entry) {
-        const todo = state.todos.find((t) => t.id === entry.id);
-        const doneCount = todo ? todo.items.filter((it) => it.done).length : 0;
-        const itemCount = todo ? todo.items.length : 0;
-        const suffix = ` (${doneCount}/${itemCount})`;
-        const availableWidth = width - PADDING * 2 - 4;
-        const maxTitleLen = availableWidth - suffix.length;
-        const title =
-          entry.title.length > maxTitleLen
-            ? `${entry.title.slice(0, maxTitleLen - 1)}…`
-            : entry.title;
-        const label = `${title}${suffix}`;
+        const isSelected = state.selectedTodoIds.includes(entry.id);
 
         screen.writeAt(currentRow, 1, " ".repeat(width));
-        drawMenuItem(
+        drawTodoListItem(
           screen,
           currentRow,
           PADDING,
-          label,
-          startIdx + i === state.menuIndex,
           width - PADDING * 2,
+          entry,
+          startIdx + i === state.menuIndex,
+          state.selectionMode,
+          isSelected,
+          state.searchQuery,
         );
         currentRow++;
 
@@ -444,7 +646,10 @@ export const renderSearchTodo = (screen: Screen, state: AppState): void => {
   const filterText = `[Ctrl+F] Filter: ${dateFilterLabel(state.dateFilter)}`;
   drawFooter(screen, currentRow, width, [
     "[↑/↓] Navigate",
-    "[Enter] Select",
+    state.selectionMode ? "[Enter] Toggle select" : "[Enter] Select",
+    "[M] Multi-select",
+    "[D] Delete",
+    "[R] Rename",
     filterText,
     "[ESC] Back",
   ]);
@@ -468,4 +673,5 @@ export const render = (screen: Screen, state: AppState): void => {
       renderViewTodo(screen, state);
       break;
   }
+  renderModal(screen, state);
 };

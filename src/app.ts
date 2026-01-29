@@ -16,10 +16,40 @@ import type { Action } from "./state/app.ts";
 import { transition } from "./state/app.ts";
 import type { AppState } from "./state/types.ts";
 import { createInitialState } from "./state/types.ts";
-import { ensureStorageDir, listTodos, saveTodo } from "./storage/todos.ts";
+import {
+  deleteTodo,
+  ensureStorageDir,
+  listTodos,
+  saveTodo,
+} from "./storage/todos.ts";
 import { render } from "./ui/menu.ts";
 
 const keyToAction = (key: KeyEvent, state: AppState): Action | null => {
+  if (state.modal) {
+    if (key.name === "escape") return { type: "CANCEL_MODAL" };
+    if (key.name === "enter") return { type: "CONFIRM_MODAL" };
+    if (state.modal.type === "rename") {
+      switch (key.name) {
+        case "backspace":
+          return { type: "INPUT_BACKSPACE" };
+        case "delete":
+          return { type: "DELETE_FORWARD" };
+        case "left":
+          return { type: "CURSOR_LEFT" };
+        case "right":
+          return { type: "CURSOR_RIGHT" };
+        case "home":
+          return { type: "CURSOR_HOME" };
+        case "end":
+          return { type: "CURSOR_END" };
+      }
+      if (key.name.length === 1 && !key.ctrl) {
+        return { type: "INPUT_CHAR", char: key.name };
+      }
+    }
+    return null;
+  }
+
   if (key.ctrl && key.name === "c") return { type: "QUIT" };
   if (key.name === "escape") return { type: "BACK" };
 
@@ -48,12 +78,25 @@ const keyToAction = (key: KeyEvent, state: AppState): Action | null => {
       case "down":
         return { type: "NAVIGATE_DOWN" };
       case "enter":
-        return { type: "SELECT" };
+        return state.selectionMode
+          ? { type: "TOGGLE_SELECTION" }
+          : { type: "SELECT" };
       case "/":
         return { type: "ENTER_SEARCH" };
-      case "f":
-      case "F":
-        return { type: "TOGGLE_DATE_FILTER" };
+      case " ":
+        return { type: "TOGGLE_SELECTION" };
+      case "m":
+      case "M":
+        return { type: "TOGGLE_SELECTION_MODE" };
+      case "d":
+      case "D":
+        return { type: "REQUEST_DELETE" };
+      case "r":
+      case "R":
+        return { type: "REQUEST_RENAME" };
+    }
+    if (key.ctrl && (key.name === "f" || key.name === "F")) {
+      return { type: "TOGGLE_DATE_FILTER" };
     }
     return null;
   }
@@ -68,7 +111,20 @@ const keyToAction = (key: KeyEvent, state: AppState): Action | null => {
       case "down":
         return { type: "NAVIGATE_DOWN" };
       case "enter":
-        return { type: "SELECT" };
+        return state.selectionMode
+          ? { type: "TOGGLE_SELECTION" }
+          : { type: "SELECT" };
+      case " ":
+        return { type: "TOGGLE_SELECTION" };
+      case "m":
+      case "M":
+        return { type: "TOGGLE_SELECTION_MODE" };
+      case "d":
+      case "D":
+        return { type: "REQUEST_DELETE" };
+      case "r":
+      case "R":
+        return { type: "REQUEST_RENAME" };
       case "backspace":
         return { type: "INPUT_BACKSPACE" };
       case "delete":
@@ -172,6 +228,7 @@ export const runApp = (): void => {
     if (!action) return;
 
     const prevView = state.view;
+    const prevModal = state.modal;
     state = transition(state, action);
 
     if (state.view === "quit") {
@@ -189,6 +246,23 @@ export const runApp = (): void => {
       (action.type === "SUBMIT" || action.type === "SELECT")
     ) {
       saveTodo(selectedTodo);
+    }
+
+    if (
+      prevModal?.type === "confirm_delete" &&
+      action.type === "CONFIRM_MODAL"
+    ) {
+      for (const id of prevModal.todoIds) {
+        deleteTodo(id);
+      }
+      state = { ...state, todos: listTodos() };
+    }
+
+    if (prevModal?.type === "rename" && action.type === "CONFIRM_MODAL") {
+      const renamedTodo = state.todos.find((t) => t.id === prevModal.todoId);
+      if (renamedTodo) {
+        saveTodo(renamedTodo);
+      }
     }
 
     renderFrame();

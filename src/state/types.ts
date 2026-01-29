@@ -53,6 +53,10 @@ export type AppView =
   | "view_todo"
   | "quit";
 
+export type ModalState =
+  | { type: "confirm_delete"; todoIds: string[] }
+  | { type: "rename"; todoId: string };
+
 export type AppState = {
   view: AppView;
   menuIndex: number;
@@ -65,6 +69,11 @@ export type AppState = {
   message: string | null;
   searchQuery: string;
   dateFilter: DateFilter;
+  selectionMode: boolean;
+  selectedTodoIds: string[];
+  modal: ModalState | null;
+  modalInput: InputBuffer;
+  modalInputBuffer: string;
 };
 
 export const createInputBuffer = (text = ""): InputBuffer => ({
@@ -84,4 +93,9 @@ export const createInitialState = (): AppState => ({
   message: null,
   searchQuery: "",
   dateFilter: "all",
+  selectionMode: false,
+  selectedTodoIds: [],
+  modal: null,
+  modalInput: createInputBuffer(),
+  modalInputBuffer: "",
 });

@@ -13,7 +13,13 @@ import {
   moveUp,
 } from "../input/cursor.ts";
 import { filterByDate, filterTodos, nextDateFilter } from "../utils/search.ts";
-import type { AppState, InputBuffer, Todo, TodoItem } from "./types.ts";
+import {
+  type AppState,
+  createInputBuffer,
+  type InputBuffer,
+  type Todo,
+  type TodoItem,
+} from "./types.ts";
 
 export type Action =
   | { type: "NAVIGATE_UP" }
@@ -38,7 +44,13 @@ export type Action =
   | { type: "MOVE_ITEM_UP" }
   | { type: "MOVE_ITEM_DOWN" }
   | { type: "ENTER_SEARCH" }
-  | { type: "TOGGLE_DATE_FILTER" };
+  | { type: "TOGGLE_DATE_FILTER" }
+  | { type: "TOGGLE_SELECTION_MODE" }
+  | { type: "TOGGLE_SELECTION" }
+  | { type: "REQUEST_DELETE" }
+  | { type: "REQUEST_RENAME" }
+  | { type: "CONFIRM_MODAL" }
+  | { type: "CANCEL_MODAL" };
 
 const MAIN_MENU_OPTIONS = 3;
 
@@ -50,8 +62,34 @@ const syncInputBuffer = (state: AppState): AppState => ({
   inputBuffer: getBufferText(state.input),
 });
 
+const syncModalInputBuffer = (state: AppState): AppState => ({
+  ...state,
+  modalInputBuffer: getBufferText(state.modalInput),
+});
+
 const withInput = (state: AppState, input: InputBuffer): AppState =>
   syncInputBuffer({ ...state, input });
+
+const withModalInput = (state: AppState, modalInput: InputBuffer): AppState =>
+  syncModalInputBuffer({ ...state, modalInput });
+
+const getTodoEntries = (state: AppState) =>
+  state.todos.map((t) => ({
+    id: t.id,
+    title: t.title,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+    itemCount: t.items.length,
+    doneCount: t.items.filter((i) => i.done).length,
+  }));
+
+const getVisibleTodos = (
+  state: AppState,
+  query: string = state.searchQuery,
+) => {
+  const dateFiltered = filterByDate(getTodoEntries(state), state.dateFilter);
+  return filterTodos(dateFiltered, query);
+};
 
 const mainMenuTransition = (state: AppState, action: Action): AppState => {
   switch (action.type) {
@@ -85,6 +123,30 @@ const mainMenuTransition = (state: AppState, action: Action): AppState => {
     }
     default:
       return state;
+  }
+};
+
+const handleModalInputAction = (
+  state: AppState,
+  action: Action,
+): AppState | null => {
+  switch (action.type) {
+    case "INPUT_CHAR":
+      return withModalInput(state, insertChar(state.modalInput, action.char));
+    case "INPUT_BACKSPACE":
+      return withModalInput(state, deleteBackward(state.modalInput));
+    case "DELETE_FORWARD":
+      return withModalInput(state, deleteForward(state.modalInput));
+    case "CURSOR_LEFT":
+      return withModalInput(state, moveLeft(state.modalInput));
+    case "CURSOR_RIGHT":
+      return withModalInput(state, moveRight(state.modalInput));
+    case "CURSOR_HOME":
+      return withModalInput(state, moveToLineStart(state.modalInput));
+    case "CURSOR_END":
+      return withModalInput(state, moveToLineEnd(state.modalInput));
+    default:
+      return null;
   }
 };
 
@@ -127,6 +189,13 @@ const handleInputAction = (
   }
 };
 
+const closeModal = (state: AppState): AppState => ({
+  ...state,
+  modal: null,
+  modalInput: clearBuffer(),
+  modalInputBuffer: "",
+});
+
 const createTodoTransition = (state: AppState, action: Action): AppState => {
   const inputResult = handleInputAction(state, action);
   if (inputResult) return inputResult;
@@ -166,11 +235,18 @@ const createTodoTransition = (state: AppState, action: Action): AppState => {
 };
 
 const loadTodoTransition = (state: AppState, action: Action): AppState => {
-  const todoCount = state.todos.length;
+  const entries = getVisibleTodos(state, "");
+  const todoCount = entries.length;
 
   switch (action.type) {
     case "BACK":
-      return { ...state, view: "main_menu", menuIndex: 0 };
+      return {
+        ...state,
+        view: "main_menu",
+        menuIndex: 0,
+        selectionMode: false,
+        selectedTodoIds: [],
+      };
     case "NAVIGATE_DOWN":
       return {
         ...state,
@@ -183,12 +259,23 @@ const loadTodoTransition = (state: AppState, action: Action): AppState => {
           todoCount > 0 ? (state.menuIndex - 1 + todoCount) % todoCount : 0,
       };
     case "SELECT": {
-      const todo = state.todos[state.menuIndex];
-      if (!todo) return state;
+      if (state.selectionMode) {
+        const entry = entries[state.menuIndex];
+        if (!entry) return state;
+        const isSelected = state.selectedTodoIds.includes(entry.id);
+        return {
+          ...state,
+          selectedTodoIds: isSelected
+            ? state.selectedTodoIds.filter((id) => id !== entry.id)
+            : [...state.selectedTodoIds, entry.id],
+        };
+      }
+      const entry = entries[state.menuIndex];
+      if (!entry) return state;
       return {
         ...state,
         view: "view_todo",
-        selectedTodoId: todo.id,
+        selectedTodoId: entry.id,
         menuIndex: 0,
       };
     }
@@ -200,6 +287,8 @@ const loadTodoTransition = (state: AppState, action: Action): AppState => {
         searchQuery: "",
         inputBuffer: "",
         input: clearBuffer(),
+        selectionMode: false,
+        selectedTodoIds: [],
       };
     case "TOGGLE_DATE_FILTER":
       return {
@@ -207,6 +296,47 @@ const loadTodoTransition = (state: AppState, action: Action): AppState => {
         dateFilter: nextDateFilter(state.dateFilter),
         menuIndex: 0,
       };
+    case "TOGGLE_SELECTION_MODE":
+      return {
+        ...state,
+        selectionMode: !state.selectionMode,
+        selectedTodoIds: state.selectionMode ? [] : state.selectedTodoIds,
+      };
+    case "TOGGLE_SELECTION": {
+      const entry = entries[state.menuIndex];
+      if (!entry) return state;
+      const isSelected = state.selectedTodoIds.includes(entry.id);
+      return {
+        ...state,
+        selectedTodoIds: isSelected
+          ? state.selectedTodoIds.filter((id) => id !== entry.id)
+          : [...state.selectedTodoIds, entry.id],
+      };
+    }
+    case "REQUEST_DELETE": {
+      if (state.selectionMode && state.selectedTodoIds.length > 0) {
+        return {
+          ...state,
+          modal: { type: "confirm_delete", todoIds: state.selectedTodoIds },
+        };
+      }
+      const entry = entries[state.menuIndex];
+      if (!entry) return state;
+      return {
+        ...state,
+        modal: { type: "confirm_delete", todoIds: [entry.id] },
+      };
+    }
+    case "REQUEST_RENAME": {
+      const entry = entries[state.menuIndex];
+      if (!entry) return state;
+      return {
+        ...state,
+        modal: { type: "rename", todoId: entry.id },
+        modalInput: createInputBuffer(entry.title),
+        modalInputBuffer: entry.title,
+      };
+    }
     default:
       return state;
   }
@@ -222,6 +352,8 @@ const searchTodoTransition = (state: AppState, action: Action): AppState => {
         searchQuery: "",
         inputBuffer: "",
         input: clearBuffer(),
+        selectionMode: false,
+        selectedTodoIds: [],
       };
     case "INPUT_CHAR": {
       const newInput = insertChar(state.input, action.char);
@@ -266,8 +398,8 @@ const searchTodoTransition = (state: AppState, action: Action): AppState => {
       return withInput(state, moveToLineEnd(state.input));
     case "NAVIGATE_DOWN":
     case "NAVIGATE_UP": {
-      const { filteredTodos } = getFilteredTodos(state);
-      const count = filteredTodos.length;
+      const entries = getVisibleTodos(state);
+      const count = entries.length;
       if (count === 0) return state;
       const delta = action.type === "NAVIGATE_DOWN" ? 1 : -1;
       return {
@@ -276,8 +408,18 @@ const searchTodoTransition = (state: AppState, action: Action): AppState => {
       };
     }
     case "SELECT": {
-      const { filteredTodos } = getFilteredTodos(state);
-      const entry = filteredTodos[state.menuIndex];
+      if (state.selectionMode) {
+        const entry = getVisibleTodos(state)[state.menuIndex];
+        if (!entry) return state;
+        const isSelected = state.selectedTodoIds.includes(entry.id);
+        return {
+          ...state,
+          selectedTodoIds: isSelected
+            ? state.selectedTodoIds.filter((id) => id !== entry.id)
+            : [...state.selectedTodoIds, entry.id],
+        };
+      }
+      const entry = getVisibleTodos(state)[state.menuIndex];
       if (!entry) return state;
       return {
         ...state,
@@ -287,6 +429,8 @@ const searchTodoTransition = (state: AppState, action: Action): AppState => {
         searchQuery: "",
         inputBuffer: "",
         input: clearBuffer(),
+        selectionMode: false,
+        selectedTodoIds: [],
       };
     }
     case "TOGGLE_DATE_FILTER":
@@ -295,27 +439,53 @@ const searchTodoTransition = (state: AppState, action: Action): AppState => {
         dateFilter: nextDateFilter(state.dateFilter),
         menuIndex: 0,
       };
+    case "TOGGLE_SELECTION_MODE":
+      return {
+        ...state,
+        selectionMode: !state.selectionMode,
+        selectedTodoIds: state.selectionMode ? [] : state.selectedTodoIds,
+      };
+    case "TOGGLE_SELECTION": {
+      const entry = getVisibleTodos(state)[state.menuIndex];
+      if (!entry) return state;
+      const isSelected = state.selectedTodoIds.includes(entry.id);
+      return {
+        ...state,
+        selectedTodoIds: isSelected
+          ? state.selectedTodoIds.filter((id) => id !== entry.id)
+          : [...state.selectedTodoIds, entry.id],
+      };
+    }
+    case "REQUEST_DELETE": {
+      if (state.selectionMode && state.selectedTodoIds.length > 0) {
+        return {
+          ...state,
+          modal: { type: "confirm_delete", todoIds: state.selectedTodoIds },
+        };
+      }
+      const entry = getVisibleTodos(state)[state.menuIndex];
+      if (!entry) return state;
+      return {
+        ...state,
+        modal: { type: "confirm_delete", todoIds: [entry.id] },
+      };
+    }
+    case "REQUEST_RENAME": {
+      const entry = getVisibleTodos(state)[state.menuIndex];
+      if (!entry) return state;
+      return {
+        ...state,
+        modal: { type: "rename", todoId: entry.id },
+        modalInput: createInputBuffer(entry.title),
+        modalInputBuffer: entry.title,
+      };
+    }
     default:
       return state;
   }
 };
 
-const getFilteredTodos = (
-  state: AppState,
-): { filteredTodos: { id: string; title: string }[] } => {
-  const entries = state.todos.map((t) => ({
-    id: t.id,
-    title: t.title,
-    createdAt: t.createdAt,
-    updatedAt: t.updatedAt,
-    itemCount: t.items.length,
-    doneCount: t.items.filter((i) => i.done).length,
-  }));
-  const dateFiltered = filterByDate(entries, state.dateFilter);
-  return { filteredTodos: filterTodos(dateFiltered, state.searchQuery) };
-};
-
-export { getFilteredTodos };
+export { getVisibleTodos };
 
 const viewTodoTransition = (state: AppState, action: Action): AppState => {
   const todo = state.todos.find((t) => t.id === state.selectedTodoId);
@@ -432,6 +602,51 @@ export const transition = (state: AppState, action: Action): AppState => {
       ...state,
       terminalSize: { rows: action.rows, cols: action.cols },
     };
+  }
+
+  if (state.modal) {
+    if (action.type === "CANCEL_MODAL") {
+      return closeModal(state);
+    }
+    if (action.type === "CONFIRM_MODAL") {
+      if (state.modal.type === "confirm_delete") {
+        const remainingTodos = state.todos.filter(
+          (todo) => !state.modal?.todoIds.includes(todo.id),
+        );
+        const menuIndex = Math.min(
+          state.menuIndex,
+          Math.max(0, remainingTodos.length - 1),
+        );
+        return closeModal({
+          ...state,
+          todos: remainingTodos,
+          selectedTodoId: state.modal.todoIds.includes(
+            state.selectedTodoId ?? "",
+          )
+            ? null
+            : state.selectedTodoId,
+          menuIndex,
+          selectionMode: false,
+          selectedTodoIds: [],
+        });
+      }
+      if (state.modal.type === "rename") {
+        const newTitle = state.modalInputBuffer.trim();
+        if (!newTitle) return closeModal(state);
+        const now = Date.now();
+        const updatedTodos = state.todos.map((todo) =>
+          todo.id === state.modal?.todoId
+            ? { ...todo, title: newTitle, updatedAt: now }
+            : todo,
+        );
+        return closeModal({ ...state, todos: updatedTodos });
+      }
+    }
+    if (state.modal.type === "rename") {
+      const inputResult = handleModalInputAction(state, action);
+      if (inputResult) return inputResult;
+    }
+    return state;
   }
 
   switch (state.view) {

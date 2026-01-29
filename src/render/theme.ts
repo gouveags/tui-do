@@ -24,6 +24,7 @@ export type ThemeColors = {
   inputBorder: string;
   inputLabel: string;
   inputText: string;
+  match: string;
 };
 
 export type Theme = {
@@ -56,6 +57,7 @@ export const defaultTheme: Theme = {
     inputBorder: fg256(60),
     inputLabel: style.bold + fg256(111),
     inputText: style.reset,
+    match: style.bold + fg256(220),
   },
   reset: style.reset,
 };
