@@ -1,4 +1,4 @@
-# to-do
+# tui-do
 
 A tiny terminal to-do list app—because sticky notes don’t run `npm install`.
 
