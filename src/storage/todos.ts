@@ -1,8 +1,24 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { Todo, TodoIndex, TodoIndexEntry } from "../state/types.ts";
 
-export const STORAGE_DIR = "./to-dos";
+const resolveStorageDir = (): string => {
+  const override = process.env.TUI_DO_DIR;
+  if (override && override.trim().length > 0) return override;
+
+  if (process.platform === "win32") {
+    const appData = process.env.APPDATA;
+    if (appData) return path.join(appData, "tui-do");
+  }
+
+  const xdgData = process.env.XDG_DATA_HOME;
+  if (xdgData) return path.join(xdgData, "tui-do");
+
+  return path.join(os.homedir(), ".local", "share", "tui-do");
+};
+
+export const STORAGE_DIR = resolveStorageDir();
 export const INDEX_FILE = ".index.json";
 
 export const ensureStorageDir = (dir: string = STORAGE_DIR): void => {

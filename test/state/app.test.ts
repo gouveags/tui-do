@@ -242,6 +242,7 @@ describe("state transitions", () => {
         view: "view_todo" as const,
         todos,
         selectedTodoId: "1",
+        isAdding: true,
         inputBuffer: "New item",
         input: { lines: ["New item"], cursor: { line: 0, col: 8 } },
       };

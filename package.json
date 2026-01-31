@@ -1,31 +1,53 @@
 {
-  "name": "to-do",
+  "name": "@gouveags/tui-do",
   "version": "1.0.0",
   "description": "to-do list app for the terminal",
   "keywords": [
     "to-do",
-    "terminal"
+    "terminal",
+    "tui",
+    "cli"
   ],
-  "homepage": "https://github.com/gouveags/to-do#readme",
+  "homepage": "https://github.com/gouveags/tui-do#readme",
   "bugs": {
-    "url": "https://github.com/gouveags/to-do/issues"
+    "url": "https://github.com/gouveags/tui-do/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gouveags/to-do.git"
+    "url": "git+https://github.com/gouveags/tui-do.git"
   },
   "license": "MIT",
   "author": "gouveags",
   "type": "module",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "tui-do": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
+    "postbuild": "node scripts/add-shebang.mjs",
     "test": "tsx --test test/**/*.test.ts",
     "start": "tsc && node dist/index.js",
     "lint": "biome check src test",
     "lint:fix": "biome check --write src test",
     "format": "biome format --write src test",
-    "prepare": "husky"
+    "prepare": "husky",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "lint-staged": {
     "*.ts": [
