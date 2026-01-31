@@ -1,5 +1,5 @@
 {
-  "name": "tui-do",
+  "name": "@gouveags/tui-do",
   "version": "1.0.0",
   "description": "to-do list app for the terminal",
   "keywords": [

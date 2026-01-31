@@ -3,7 +3,7 @@
 A tiny terminal to-do list app—because sticky notes don’t run `npm install`.
 
 ## Links
-- npm: https://www.npmjs.com/package/tui-do
+- npm: https://www.npmjs.com/package/@gouveags/tui-do
 - GitHub: https://github.com/gouveags/tui-do
 
 ## Install
@@ -11,7 +11,7 @@ Requires Node 18+.
 
 Global (recommended):
 ```bash
-npm install -g tui-do
+npm install -g @gouveags/tui-do
 tui-do
 ```
 
