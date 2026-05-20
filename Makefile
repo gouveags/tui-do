@@ -14,7 +14,7 @@ TERMINAL_TEST_TARGET := $(BUILD_DIR)/test-terminal
 TERMINAL_TEST_SOURCES := test/terminal_test.c src/terminal.c
 STORAGE_TEST_TARGET := $(BUILD_DIR)/test-storage
 STORAGE_TEST_SOURCES := test/storage_test.c src/storage.c
-FORMAT_FILES := AGENTS.md README.md Makefile src/app.c src/app.h src/main.c src/storage.c src/storage.h src/terminal.c src/terminal.h src/ui.c src/ui.h test/app_test.c test/main_menu_test.c test/storage_test.c test/terminal_test.c test/test.h
+FORMAT_FILES := AGENTS.md README.md docs/vision-and-requirements.md Makefile src/app.c src/app.h src/main.c src/storage.c src/storage.h src/terminal.c src/terminal.h src/ui.c src/ui.h test/app_test.c test/main_menu_test.c test/storage_test.c test/terminal_test.c test/test.h
 
 .PHONY: all run test lint format format-check smoke check clean
 
