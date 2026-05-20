@@ -36,6 +36,16 @@ static int terminal_size_is_valid(TerminalSize terminal) {
     return terminal.width > 0 && terminal.height > 0;
 }
 
+static int terminal_fd_has_pending_input(int fd) {
+    fd_set read_fds;
+    struct timeval timeout = {0};
+
+    FD_ZERO(&read_fds);
+    FD_SET(fd, &read_fds);
+
+    return select(fd + 1, &read_fds, NULL, NULL, &timeout) > 0;
+}
+
 TerminalSize terminal_resolve_size(TerminalSize stdio_size, TerminalSize tty_size, TerminalSize env_size) {
     if (terminal_size_is_valid(stdio_size)) {
         return stdio_size;
@@ -132,8 +142,11 @@ int terminal_try_read_key_from_fd(int fd) {
     ssize_t bytes_read = read(fd, bytes, 1);
 
     if (bytes_read == 1 && bytes[0] == 27) {
-        ssize_t extra = read(fd, bytes + 1, 2);
-        if (extra > 0) {
+        while (bytes_read < 3 && terminal_fd_has_pending_input(fd)) {
+            ssize_t extra = read(fd, bytes + bytes_read, 1);
+            if (extra <= 0) {
+                break;
+            }
             bytes_read += extra;
         }
     }

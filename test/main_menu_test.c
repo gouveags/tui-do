@@ -136,7 +136,28 @@ SCENARIO(main_menu_contains_the_core_actions) {
     EXPECT_TRUE(render_contains_text(commands, "Create a new to-do"));
     EXPECT_TRUE(render_contains_text(commands, "Load a to-do"));
     EXPECT_TRUE(render_contains_text(commands, "Quit"));
-    EXPECT_TRUE(render_contains_text(commands, "q"));
+    EXPECT_TRUE(render_contains_text(commands, "q/ctrl+c"));
+    EXPECT_TRUE(render_contains_text(commands, "quit"));
+}
+
+SCENARIO(main_menu_footer_lists_every_available_bind) {
+    TerminalSize terminal = { .width = 160, .height = 50 };
+    AppState state = { .selected_menu_index = 0 };
+
+    GIVEN("the main menu is visible");
+    setup_clay(terminal);
+
+    WHEN("the main menu is rendered");
+    Clay_RenderCommandArray commands = ui_render_main_menu(&state, terminal);
+
+    THEN("the footer teaches every main menu bind");
+    EXPECT_TRUE(render_contains_text(commands, "up/down"));
+    EXPECT_TRUE(render_contains_text(commands, "move"));
+    EXPECT_TRUE(render_contains_text(commands, "1-3/enter"));
+    EXPECT_TRUE(render_contains_text(commands, "activate"));
+    EXPECT_TRUE(render_contains_text(commands, "esc/m"));
+    EXPECT_TRUE(render_contains_text(commands, "main"));
+    EXPECT_TRUE(render_contains_text(commands, "q/ctrl+c"));
     EXPECT_TRUE(render_contains_text(commands, "quit"));
 }
 
@@ -222,13 +243,44 @@ SCENARIO(capture_input_renders_a_visible_cursor) {
     EXPECT_TRUE(render_contains_text_fragment(commands, "A_C"));
 }
 
+SCENARIO(capture_footer_lists_every_available_bind) {
+    TerminalSize terminal = { .width = 160, .height = 50 };
+    AppState state = {
+        .view = APP_VIEW_CAPTURE,
+        .capture_title = "Draft",
+        .capture_cursor = 5,
+    };
+
+    GIVEN("the capture screen is visible");
+    setup_clay(terminal);
+
+    WHEN("the capture screen is rendered");
+    Clay_RenderCommandArray commands = ui_render_app(&state, terminal);
+
+    THEN("the footer teaches every capture bind");
+    EXPECT_TRUE(render_contains_text(commands, "type"));
+    EXPECT_TRUE(render_contains_text(commands, "title"));
+    EXPECT_TRUE(render_contains_text(commands, "left/right"));
+    EXPECT_TRUE(render_contains_text(commands, "cursor"));
+    EXPECT_TRUE(render_contains_text(commands, "backspace"));
+    EXPECT_TRUE(render_contains_text(commands, "delete"));
+    EXPECT_TRUE(render_contains_text(commands, "enter"));
+    EXPECT_TRUE(render_contains_text(commands, "save"));
+    EXPECT_TRUE(render_contains_text(commands, "esc/m"));
+    EXPECT_TRUE(render_contains_text(commands, "main"));
+    EXPECT_TRUE(render_contains_text(commands, "q/ctrl+c"));
+    EXPECT_TRUE(render_contains_text(commands, "quit"));
+}
+
 int main(void) {
     RUN_SCENARIO(main_menu_contains_the_core_actions);
+    RUN_SCENARIO(main_menu_footer_lists_every_available_bind);
     RUN_SCENARIO(main_menu_paints_the_full_terminal_width);
     RUN_SCENARIO(selected_menu_item_follows_state);
     RUN_SCENARIO(terminal_size_honors_large_environment_dimensions);
     RUN_SCENARIO(terminal_size_resolution_does_not_clamp_to_a_minimum);
     RUN_SCENARIO(capture_input_renders_a_visible_cursor);
+    RUN_SCENARIO(capture_footer_lists_every_available_bind);
 
     return finish_tests();
 }

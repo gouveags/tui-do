@@ -187,11 +187,11 @@ static void draw_footer(void) {
     }) {
         draw_text("up/down", COLOR_ACCENT);
         draw_text("move", COLOR_MUTED);
-        draw_text("enter", COLOR_ACCENT);
-        draw_text("select", COLOR_MUTED);
-        draw_text("1-3", COLOR_ACCENT);
-        draw_text("quick select", COLOR_MUTED);
-        draw_text("q", COLOR_ACCENT);
+        draw_text("1-3/enter", COLOR_ACCENT);
+        draw_text("activate", COLOR_MUTED);
+        draw_text("esc/m", COLOR_ACCENT);
+        draw_text("main", COLOR_MUTED);
+        draw_text("q/ctrl+c", COLOR_ACCENT);
         draw_text("quit", COLOR_MUTED);
     }
 }
@@ -262,10 +262,16 @@ static void draw_capture_footer(void) {
         .backgroundColor = COLOR_SURFACE,
     }) {
         draw_text("type", COLOR_ACCENT);
-        draw_text("capture title", COLOR_MUTED);
+        draw_text("title", COLOR_MUTED);
+        draw_text("left/right", COLOR_ACCENT);
+        draw_text("cursor", COLOR_MUTED);
+        draw_text("backspace", COLOR_ACCENT);
+        draw_text("delete", COLOR_MUTED);
         draw_text("enter", COLOR_ACCENT);
         draw_text("save", COLOR_MUTED);
-        draw_text("ctrl+c", COLOR_ACCENT);
+        draw_text("esc/m", COLOR_ACCENT);
+        draw_text("main", COLOR_MUTED);
+        draw_text("q/ctrl+c", COLOR_ACCENT);
         draw_text("quit", COLOR_MUTED);
     }
 }
