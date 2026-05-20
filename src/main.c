@@ -79,15 +79,17 @@ int main(void) {
         }
 
         int key = terminal_try_read_key();
-        if (key == 'q') {
-            break;
-        }
         if (key == TERMINAL_KEY_NONE) {
             struct timespec frame_pause = {
                 .tv_sec = 0,
                 .tv_nsec = 16000000,
             };
             nanosleep(&frame_pause, NULL);
+        } else {
+            app_handle_key(&app, key);
+            if (app.should_quit) {
+                break;
+            }
         }
     }
 

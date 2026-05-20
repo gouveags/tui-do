@@ -124,18 +124,52 @@ int terminal_read_key(void) {
     if (read(STDIN_FILENO, &key, 1) != 1) {
         return TERMINAL_KEY_NONE;
     }
-    return key;
+    return terminal_decode_key_sequence(&key, 1);
 }
 
 int terminal_try_read_key_from_fd(int fd) {
-    unsigned char key;
-    ssize_t bytes_read = read(fd, &key, 1);
+    unsigned char bytes[3];
+    ssize_t bytes_read = read(fd, bytes, 1);
 
-    if (bytes_read == 1) {
-        return key;
+    if (bytes_read == 1 && bytes[0] == 27) {
+        ssize_t extra = read(fd, bytes + 1, 2);
+        if (extra > 0) {
+            bytes_read += extra;
+        }
+    }
+
+    if (bytes_read > 0) {
+        return terminal_decode_key_sequence(bytes, (int)bytes_read);
     }
     if (bytes_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
         return TERMINAL_KEY_NONE;
+    }
+
+    return TERMINAL_KEY_NONE;
+}
+
+int terminal_decode_key_sequence(const unsigned char *bytes, int length) {
+    if (bytes == NULL || length <= 0) {
+        return TERMINAL_KEY_NONE;
+    }
+
+    if (length == 1) {
+        if (bytes[0] == 3) {
+            return TERMINAL_KEY_CTRL_C;
+        }
+        if (bytes[0] == '\r' || bytes[0] == '\n') {
+            return TERMINAL_KEY_ENTER;
+        }
+        return bytes[0];
+    }
+
+    if (length >= 3 && bytes[0] == 27 && bytes[1] == '[') {
+        if (bytes[2] == 'A') {
+            return TERMINAL_KEY_UP;
+        }
+        if (bytes[2] == 'B') {
+            return TERMINAL_KEY_DOWN;
+        }
     }
 
     return TERMINAL_KEY_NONE;

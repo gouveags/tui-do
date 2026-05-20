@@ -10,10 +10,12 @@ typedef struct App {
     TerminalSize pending_terminal;
     int pending_resize_observations;
     int needs_redraw;
+    int should_quit;
 } App;
 
 App app_create(TerminalSize terminal);
 void app_handle_resize(App *app, TerminalSize terminal);
 void app_observe_terminal_size(App *app, TerminalSize terminal);
+void app_handle_key(App *app, int key);
 
 #endif

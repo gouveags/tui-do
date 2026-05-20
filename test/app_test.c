@@ -70,11 +70,62 @@ SCENARIO(app_uses_the_latest_size_after_noisy_resize_events) {
     EXPECT_INT_EQ(app.needs_redraw, 1);
 }
 
+SCENARIO(menu_navigation_wraps_with_arrow_keys) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.needs_redraw = 0;
+
+    GIVEN("the first main menu item is selected");
+
+    WHEN("the user navigates upward");
+    app_handle_key(&app, TERMINAL_KEY_UP);
+
+    THEN("selection wraps to the last menu item and redraws");
+    EXPECT_INT_EQ(app.state.selected_menu_index, 2);
+    EXPECT_INT_EQ(app.needs_redraw, 1);
+
+    WHEN("the user navigates downward");
+    app.needs_redraw = 0;
+    app_handle_key(&app, TERMINAL_KEY_DOWN);
+
+    THEN("selection wraps back to the first menu item");
+    EXPECT_INT_EQ(app.state.selected_menu_index, 0);
+    EXPECT_INT_EQ(app.needs_redraw, 1);
+}
+
+SCENARIO(menu_quick_select_keys_jump_to_items) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.needs_redraw = 0;
+
+    GIVEN("the main menu is open");
+
+    WHEN("the user presses 2");
+    app_handle_key(&app, '2');
+
+    THEN("the second menu item is selected");
+    EXPECT_INT_EQ(app.state.selected_menu_index, 1);
+    EXPECT_INT_EQ(app.needs_redraw, 1);
+}
+
+SCENARIO(menu_quit_keys_request_termination) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+
+    GIVEN("the main menu is open");
+
+    WHEN("the user presses Ctrl+C");
+    app_handle_key(&app, TERMINAL_KEY_CTRL_C);
+
+    THEN("the app requests termination");
+    EXPECT_INT_EQ(app.should_quit, 1);
+}
+
 int main(void) {
     RUN_SCENARIO(app_marks_itself_for_redraw_when_the_terminal_resizes);
     RUN_SCENARIO(app_does_not_redraw_when_the_terminal_size_is_unchanged);
     RUN_SCENARIO(app_waits_for_resize_to_stabilize_before_redrawing);
     RUN_SCENARIO(app_uses_the_latest_size_after_noisy_resize_events);
+    RUN_SCENARIO(menu_navigation_wraps_with_arrow_keys);
+    RUN_SCENARIO(menu_quick_select_keys_jump_to_items);
+    RUN_SCENARIO(menu_quit_keys_request_termination);
 
     return finish_tests();
 }

@@ -43,9 +43,25 @@ SCENARIO(key_polling_can_return_without_input) {
     close(pipe_fds[1]);
 }
 
+SCENARIO(terminal_decodes_arrow_keys_and_ctrl_c) {
+    const unsigned char up[] = {27, '[', 'A'};
+    const unsigned char down[] = {27, '[', 'B'};
+    const unsigned char ctrl_c[] = {3};
+
+    GIVEN("raw terminal key bytes");
+
+    WHEN("the bytes are decoded");
+
+    THEN("navigation and termination keys are semantic");
+    EXPECT_INT_EQ(terminal_decode_key_sequence(up, 3), TERMINAL_KEY_UP);
+    EXPECT_INT_EQ(terminal_decode_key_sequence(down, 3), TERMINAL_KEY_DOWN);
+    EXPECT_INT_EQ(terminal_decode_key_sequence(ctrl_c, 1), TERMINAL_KEY_CTRL_C);
+}
+
 int main(void) {
     RUN_SCENARIO(render_output_clears_the_whole_screen_before_drawing);
     RUN_SCENARIO(key_polling_can_return_without_input);
+    RUN_SCENARIO(terminal_decodes_arrow_keys_and_ctrl_c);
 
     return finish_tests();
 }
