@@ -2,9 +2,15 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 
 #include "../src/app.h"
 #include "../src/storage.h"
+
+static int app_test_file_exists(const char *path) {
+    struct stat info;
+    return stat(path, &info) == 0;
+}
 
 SCENARIO(app_marks_itself_for_redraw_when_the_terminal_resizes) {
     App app = app_create((TerminalSize) { .width = 160, .height = 50 });
@@ -175,6 +181,22 @@ SCENARIO(capture_view_edits_the_title_buffer) {
     EXPECT_TRUE(strcmp(app.state.capture_title, "Buy") == 0);
 }
 
+SCENARIO(capture_view_treats_action_letters_as_text) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_CAPTURE;
+
+    GIVEN("the capture title field is focused");
+
+    WHEN("the user types letters that are actions elsewhere");
+    app_handle_key(&app, 'q');
+    app_handle_key(&app, 'm');
+
+    THEN("the letters are inserted instead of triggering global actions");
+    EXPECT_TRUE(strcmp(app.state.capture_title, "qm") == 0);
+    EXPECT_INT_EQ(app.should_quit, 0);
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_CAPTURE);
+}
+
 SCENARIO(capture_view_moves_the_cursor_and_inserts_at_cursor) {
     App app = app_create((TerminalSize) { .width = 100, .height = 30 });
     app.state.view = APP_VIEW_CAPTURE;
@@ -236,6 +258,7 @@ SCENARIO(capture_view_does_not_save_empty_titles) {
 SCENARIO(capture_view_saves_a_new_inbox_todo) {
     App app = app_create_with_storage((TerminalSize) { .width = 100, .height = 30 }, "build/app-capture-save");
     TodoIndex index = {0};
+    char note_path[TODO_PATH_MAX];
 
     GIVEN("the capture view has a title");
     system("rm -rf build/app-capture-save");
@@ -258,6 +281,8 @@ SCENARIO(capture_view_saves_a_new_inbox_todo) {
     EXPECT_TRUE(strcmp(index.entries[0].title, "Fix") == 0);
     EXPECT_INT_EQ((int)index.entries[0].created_at, 1234);
     EXPECT_INT_EQ((int)index.entries[0].updated_at, 1234);
+    EXPECT_INT_EQ(storage_todo_note_path("build/app-capture-save", index.entries[0].id, note_path, sizeof(note_path)), 0);
+    EXPECT_TRUE(app_test_file_exists(note_path));
 }
 
 SCENARIO(load_menu_opens_the_inbox_newest_first) {
@@ -358,6 +383,83 @@ SCENARIO(escape_returns_from_detail_to_inbox_before_main_menu) {
     EXPECT_INT_EQ(app.state.view, APP_VIEW_MAIN_MENU);
 }
 
+SCENARIO(detail_edit_bind_records_the_selected_note_path) {
+    App app = app_create_with_storage((TerminalSize) { .width = 100, .height = 30 }, "build/app-detail-edit");
+    Todo todo = {
+        .id = "entry-edit",
+        .title = "Edit this note",
+        .created_at = 10,
+        .updated_at = 10,
+    };
+
+    GIVEN("an entry detail is open");
+    system("rm -rf build/app-detail-edit");
+    storage_save_todo("build/app-detail-edit", &todo);
+    storage_save_todo_note("build/app-detail-edit", "entry-edit", "# Edit this note\n\nOriginal text\n");
+    app_handle_key(&app, '2');
+    app_handle_key(&app, TERMINAL_KEY_ENTER);
+
+    WHEN("the user presses e");
+    app_handle_key(&app, 'e');
+
+    THEN("the built-in note editor opens with the note content");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_NOTE_EDITOR);
+    EXPECT_TRUE(strcmp(app.state.note_text, "# Edit this note\n\nOriginal text\n") == 0);
+    EXPECT_INT_EQ(app.state.note_cursor, (int)strlen(app.state.note_text));
+}
+
+SCENARIO(note_editor_edits_multiple_lines_and_saves) {
+    App app = app_create_with_storage((TerminalSize) { .width = 100, .height = 30 }, "build/app-note-editor");
+    Todo todo = {
+        .id = "entry-editor",
+        .title = "Editor note",
+        .created_at = 10,
+        .updated_at = 10,
+    };
+    char note[TODO_NOTE_MAX];
+
+    GIVEN("the built-in note editor is open");
+    system("rm -rf build/app-note-editor");
+    storage_save_todo("build/app-note-editor", &todo);
+    app_handle_key(&app, '2');
+    app_handle_key(&app, TERMINAL_KEY_ENTER);
+    app_handle_key(&app, 'e');
+
+    WHEN("the user appends text, inserts a Shift+Enter line break, and saves");
+    app_handle_key(&app, 'N');
+    app_handle_key(&app, 'e');
+    app_handle_key(&app, 'x');
+    app_handle_key(&app, 't');
+    app_handle_key(&app, TERMINAL_KEY_SHIFT_ENTER);
+    app_handle_key(&app, 'L');
+    app_handle_key(&app, 'i');
+    app_handle_key(&app, 'n');
+    app_handle_key(&app, 'e');
+    app_handle_key(&app, TERMINAL_KEY_CTRL_S);
+
+    THEN("the note is saved and the app returns to detail");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_DETAIL);
+    EXPECT_INT_EQ(storage_load_todo_note("build/app-note-editor", "entry-editor", note, sizeof(note)), 0);
+    EXPECT_TRUE(strstr(note, "Next\nLine") != NULL);
+}
+
+SCENARIO(note_editor_treats_action_letters_as_text) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_NOTE_EDITOR;
+
+    GIVEN("the built-in note editor is focused");
+
+    WHEN("the user types letters that are actions elsewhere");
+    app_handle_key(&app, 'q');
+    app_handle_key(&app, 'm');
+    app_handle_key(&app, 'e');
+
+    THEN("the letters are inserted into the note");
+    EXPECT_TRUE(strcmp(app.state.note_text, "qme") == 0);
+    EXPECT_INT_EQ(app.should_quit, 0);
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_NOTE_EDITOR);
+}
+
 SCENARIO(escape_goes_back_to_the_previous_screen) {
     App app = app_create((TerminalSize) { .width = 100, .height = 30 });
     app.state.view = APP_VIEW_CAPTURE;
@@ -378,18 +480,16 @@ SCENARIO(escape_goes_back_to_the_previous_screen) {
 
 SCENARIO(main_menu_key_returns_to_main_from_any_screen) {
     App app = app_create((TerminalSize) { .width = 100, .height = 30 });
-    app.state.view = APP_VIEW_CAPTURE;
+    app.state.view = APP_VIEW_INBOX;
     app.needs_redraw = 0;
-    app_handle_key(&app, 'A');
 
-    GIVEN("the user is away from the main menu");
+    GIVEN("the user is on a non-typing screen");
 
     WHEN("the user presses m");
     app_handle_key(&app, 'm');
 
     THEN("the app returns to the main menu");
     EXPECT_INT_EQ(app.state.view, APP_VIEW_MAIN_MENU);
-    EXPECT_TRUE(strcmp(app.state.capture_title, "") == 0);
     EXPECT_INT_EQ(app.needs_redraw, 1);
 }
 
@@ -404,6 +504,7 @@ int main(void) {
     RUN_SCENARIO(menu_quit_keys_request_termination);
     RUN_SCENARIO(selecting_create_opens_the_capture_view);
     RUN_SCENARIO(capture_view_edits_the_title_buffer);
+    RUN_SCENARIO(capture_view_treats_action_letters_as_text);
     RUN_SCENARIO(capture_view_moves_the_cursor_and_inserts_at_cursor);
     RUN_SCENARIO(capture_view_backspace_removes_before_cursor);
     RUN_SCENARIO(capture_view_does_not_save_empty_titles);
@@ -412,6 +513,9 @@ int main(void) {
     RUN_SCENARIO(inbox_navigation_opens_the_selected_detail);
     RUN_SCENARIO(inbox_create_bind_starts_a_new_capture);
     RUN_SCENARIO(escape_returns_from_detail_to_inbox_before_main_menu);
+    RUN_SCENARIO(detail_edit_bind_records_the_selected_note_path);
+    RUN_SCENARIO(note_editor_edits_multiple_lines_and_saves);
+    RUN_SCENARIO(note_editor_treats_action_letters_as_text);
     RUN_SCENARIO(escape_goes_back_to_the_previous_screen);
     RUN_SCENARIO(main_menu_key_returns_to_main_from_any_screen);
 

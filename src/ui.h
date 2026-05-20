@@ -10,6 +10,7 @@ typedef enum AppView {
     APP_VIEW_CAPTURE,
     APP_VIEW_INBOX,
     APP_VIEW_DETAIL,
+    APP_VIEW_NOTE_EDITOR,
 } AppView;
 
 typedef struct AppState {
@@ -19,6 +20,8 @@ typedef struct AppState {
     TodoIndex inbox;
     char capture_title[128];
     int capture_cursor;
+    char note_text[TODO_NOTE_MAX];
+    int note_cursor;
     char message[128];
 } AppState;
 

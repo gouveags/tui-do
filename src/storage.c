@@ -59,6 +59,14 @@ static int write_file_atomic(const char *path, const char *content) {
     return 0;
 }
 
+static int write_file_if_missing(const char *path, const char *content) {
+    if (access(path, F_OK) == 0) {
+        return 0;
+    }
+
+    return write_file_atomic(path, content);
+}
+
 static size_t todo_done_count(const Todo *todo) {
     size_t done_count = 0;
 
@@ -118,6 +126,71 @@ int storage_markdown_path(const char *root, const char *todo_id, const char *ite
     }
 
     return join_path(out, out_size, items_dir, markdown_file);
+}
+
+int storage_todo_note_path(const char *root, const char *todo_id, char *out, size_t out_size) {
+    char lists_dir[TODO_PATH_MAX];
+    char todo_dir[TODO_PATH_MAX];
+
+    if (
+        join_path(lists_dir, sizeof(lists_dir), root, "lists") != 0 ||
+        join_path(todo_dir, sizeof(todo_dir), lists_dir, todo_id) != 0
+    ) {
+        return -1;
+    }
+
+    return join_path(out, out_size, todo_dir, "notes.md");
+}
+
+int storage_load_todo_note(const char *root, const char *todo_id, char *out, size_t out_size) {
+    char path[TODO_PATH_MAX];
+    FILE *file;
+    size_t bytes_read;
+
+    if (out == NULL || out_size == 0) {
+        return -1;
+    }
+    out[0] = '\0';
+    if (storage_todo_note_path(root, todo_id, path, sizeof(path)) != 0) {
+        return -1;
+    }
+
+    file = fopen(path, "rb");
+    if (file == NULL) {
+        return 0;
+    }
+
+    bytes_read = fread(out, 1, out_size - 1, file);
+    out[bytes_read] = '\0';
+    fclose(file);
+    return 0;
+}
+
+int storage_save_todo_note(const char *root, const char *todo_id, const char *content) {
+    char path[TODO_PATH_MAX];
+
+    if (content == NULL || storage_todo_note_path(root, todo_id, path, sizeof(path)) != 0) {
+        return -1;
+    }
+
+    return write_file_atomic(path, content);
+}
+
+static int save_default_note_file(const char *root, const Todo *todo) {
+    char path[TODO_PATH_MAX];
+    char content[TODO_TEXT_MAX + TODO_TITLE_MAX];
+    int written;
+
+    if (storage_todo_note_path(root, todo->id, path, sizeof(path)) != 0) {
+        return -1;
+    }
+
+    written = snprintf(content, sizeof(content), "# %s\n\n", todo->title);
+    if (written <= 0 || (size_t)written >= sizeof(content)) {
+        return -1;
+    }
+
+    return write_file_if_missing(path, content);
 }
 
 static int save_todo_file(const char *todo_dir, const Todo *todo) {
@@ -266,6 +339,9 @@ int storage_save_todo(const char *root, const Todo *todo) {
         return -1;
     }
     if (save_todo_file(todo_dir, todo) != 0) {
+        return -1;
+    }
+    if (save_default_note_file(root, todo) != 0) {
         return -1;
     }
     if (save_markdown_files(root, todo) != 0) {

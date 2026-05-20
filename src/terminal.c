@@ -92,13 +92,21 @@ TerminalSize terminal_get_size(void) {
     return terminal_resolve_size(stdio_size, tty_size, env_size);
 }
 
+const char *terminal_enter_fullscreen_sequence(void) {
+    return "\033[>4;1m\033[?1049h\033[?25l\033[2J\033[H";
+}
+
+const char *terminal_leave_fullscreen_sequence(void) {
+    return "\033[?25h\033[?1049l\033[>4;0m";
+}
+
 void terminal_enter_fullscreen(void) {
-    printf("\033[?1049h\033[?25l\033[2J\033[H");
+    printf("%s", terminal_enter_fullscreen_sequence());
     fflush(stdout);
 }
 
 void terminal_leave_fullscreen(void) {
-    printf("\033[?25h\033[?1049l");
+    printf("%s", terminal_leave_fullscreen_sequence());
     fflush(stdout);
 }
 
@@ -138,11 +146,11 @@ int terminal_read_key(void) {
 }
 
 int terminal_try_read_key_from_fd(int fd) {
-    unsigned char bytes[3];
+    unsigned char bytes[16];
     ssize_t bytes_read = read(fd, bytes, 1);
 
     if (bytes_read == 1 && bytes[0] == 27) {
-        while (bytes_read < 3 && terminal_fd_has_pending_input(fd)) {
+        while (bytes_read < (ssize_t)sizeof(bytes) && terminal_fd_has_pending_input(fd)) {
             ssize_t extra = read(fd, bytes + bytes_read, 1);
             if (extra <= 0) {
                 break;
@@ -170,6 +178,9 @@ int terminal_decode_key_sequence(const unsigned char *bytes, int length) {
         if (bytes[0] == 3) {
             return TERMINAL_KEY_CTRL_C;
         }
+        if (bytes[0] == 19) {
+            return TERMINAL_KEY_CTRL_S;
+        }
         if (bytes[0] == 27) {
             return TERMINAL_KEY_ESCAPE;
         }
@@ -195,6 +206,35 @@ int terminal_decode_key_sequence(const unsigned char *bytes, int length) {
         if (bytes[2] == 'D') {
             return TERMINAL_KEY_LEFT;
         }
+    }
+
+    if (
+        length == 7 &&
+        bytes[0] == 27 &&
+        bytes[1] == '[' &&
+        bytes[2] == '1' &&
+        bytes[3] == '3' &&
+        bytes[4] == ';' &&
+        bytes[5] == '2' &&
+        bytes[6] == 'u'
+    ) {
+        return TERMINAL_KEY_SHIFT_ENTER;
+    }
+
+    if (
+        length == 10 &&
+        bytes[0] == 27 &&
+        bytes[1] == '[' &&
+        bytes[2] == '2' &&
+        bytes[3] == '7' &&
+        bytes[4] == ';' &&
+        bytes[5] == '2' &&
+        bytes[6] == ';' &&
+        bytes[7] == '1' &&
+        bytes[8] == '3' &&
+        bytes[9] == '~'
+    ) {
+        return TERMINAL_KEY_SHIFT_ENTER;
     }
 
     return TERMINAL_KEY_NONE;

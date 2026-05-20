@@ -12,6 +12,8 @@
 #define TERMINAL_KEY_LEFT 1005
 #define TERMINAL_KEY_RIGHT 1006
 #define TERMINAL_KEY_ESCAPE 1007
+#define TERMINAL_KEY_SHIFT_ENTER 1008
+#define TERMINAL_KEY_CTRL_S 1009
 
 typedef struct TerminalSize {
     int width;
@@ -20,6 +22,8 @@ typedef struct TerminalSize {
 
 TerminalSize terminal_get_size(void);
 TerminalSize terminal_resolve_size(TerminalSize stdio_size, TerminalSize tty_size, TerminalSize env_size);
+const char *terminal_enter_fullscreen_sequence(void);
+const char *terminal_leave_fullscreen_sequence(void);
 void terminal_enter_fullscreen(void);
 void terminal_leave_fullscreen(void);
 void terminal_enable_raw_mode(void);

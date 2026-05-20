@@ -268,7 +268,7 @@ SCENARIO(capture_footer_lists_every_available_bind) {
     EXPECT_TRUE(render_contains_text(commands, "save"));
     EXPECT_TRUE(render_contains_text(commands, "esc/m"));
     EXPECT_TRUE(render_contains_text(commands, "main"));
-    EXPECT_TRUE(render_contains_text(commands, "q/ctrl+c"));
+    EXPECT_TRUE(render_contains_text(commands, "ctrl+c"));
     EXPECT_TRUE(render_contains_text(commands, "quit"));
 }
 
@@ -321,6 +321,7 @@ SCENARIO(detail_screen_renders_selected_entry_shape) {
     AppState state = {
         .view = APP_VIEW_DETAIL,
         .selected_inbox_index = 0,
+        .note_text = "# Clarify project scope\n\nWrite the actual scope here.\n- Bullet\n- [x] Done\n> Quote",
         .inbox = {
             .entry_count = 1,
             .entries = {
@@ -340,18 +341,52 @@ SCENARIO(detail_screen_renders_selected_entry_shape) {
     WHEN("the detail screen is rendered");
     Clay_RenderCommandArray commands = ui_render_app(&state, terminal);
 
-    THEN("the entry identity and future markdown shape are visible");
+    THEN("the entry identity and markdown note shape are visible");
     EXPECT_TRUE(render_contains_text(commands, "detail"));
     EXPECT_TRUE(render_contains_text(commands, "Clarify project scope"));
     EXPECT_TRUE(render_contains_text(commands, "entry-42"));
     EXPECT_TRUE(render_contains_text(commands, "created"));
     EXPECT_TRUE(render_contains_text(commands, "4242"));
     EXPECT_TRUE(render_contains_text(commands, "markdown"));
-    EXPECT_TRUE(render_contains_text(commands, "items/notes.md"));
+    EXPECT_TRUE(render_contains_text(commands, "notes.md"));
+    EXPECT_TRUE(render_contains_text(commands, "Clarify project scope"));
+    EXPECT_TRUE(render_contains_text(commands, "Write the actual scope here."));
+    EXPECT_TRUE(render_contains_text(commands, "- Bullet"));
+    EXPECT_TRUE(render_contains_text(commands, "[x] Done"));
+    EXPECT_TRUE(render_contains_text(commands, "> Quote"));
+    EXPECT_TRUE(render_contains_text(commands, "e"));
+    EXPECT_TRUE(render_contains_text(commands, "edit"));
     EXPECT_TRUE(render_contains_text(commands, "esc"));
     EXPECT_TRUE(render_contains_text(commands, "back"));
     EXPECT_TRUE(render_contains_text(commands, "m"));
     EXPECT_TRUE(render_contains_text(commands, "main"));
+}
+
+SCENARIO(note_editor_renders_text_area_save_button_and_binds) {
+    TerminalSize terminal = { .width = 160, .height = 50 };
+    AppState state = {
+        .view = APP_VIEW_NOTE_EDITOR,
+        .note_text = "# Title\n\nBody",
+        .note_cursor = 10,
+    };
+
+    GIVEN("the note editor is open");
+    setup_clay(terminal);
+
+    WHEN("the note editor is rendered");
+    Clay_RenderCommandArray commands = ui_render_app(&state, terminal);
+
+    THEN("the text area, cursor, save button, and binds are visible");
+    EXPECT_TRUE(render_contains_text(commands, "editor"));
+    EXPECT_TRUE(render_contains_text(commands, "# Title"));
+    EXPECT_TRUE(render_contains_text(commands, "B_ody"));
+    EXPECT_TRUE(render_contains_text(commands, "[ Save ]"));
+    EXPECT_TRUE(render_contains_text(commands, "shift+enter"));
+    EXPECT_TRUE(render_contains_text(commands, "newline"));
+    EXPECT_TRUE(render_contains_text(commands, "ctrl+s"));
+    EXPECT_TRUE(render_contains_text(commands, "save"));
+    EXPECT_TRUE(render_contains_text(commands, "ctrl+c"));
+    EXPECT_TRUE(!render_contains_text(commands, "q/ctrl+c"));
 }
 
 int main(void) {
@@ -365,6 +400,7 @@ int main(void) {
     RUN_SCENARIO(capture_footer_lists_every_available_bind);
     RUN_SCENARIO(inbox_screen_renders_entries_and_binds);
     RUN_SCENARIO(detail_screen_renders_selected_entry_shape);
+    RUN_SCENARIO(note_editor_renders_text_area_save_button_and_binds);
 
     return finish_tests();
 }

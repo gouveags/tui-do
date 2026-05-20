@@ -71,6 +71,47 @@ SCENARIO(saving_a_todo_writes_index_metadata_and_item_markdown) {
     EXPECT_TRUE(!file_exists(tmp_path));
 }
 
+SCENARIO(saving_a_todo_creates_a_default_entry_note) {
+    Todo todo = {
+        .id = "entry-note",
+        .title = "Write richer notes",
+        .created_at = 100,
+        .updated_at = 100,
+    };
+    char note_path[TODO_PATH_MAX];
+
+    GIVEN("a todo without item-level markdown");
+    reset_storage_root();
+
+    WHEN("the todo is saved");
+    EXPECT_INT_EQ(storage_save_todo(test_root, &todo), 0);
+
+    THEN("a default markdown note exists for the entry itself");
+    EXPECT_INT_EQ(storage_todo_note_path(test_root, "entry-note", note_path, sizeof(note_path)), 0);
+    EXPECT_TRUE(file_exists(note_path));
+}
+
+SCENARIO(todo_note_can_be_loaded_and_saved) {
+    Todo todo = {
+        .id = "entry-note-edit",
+        .title = "Edit markdown",
+        .created_at = 100,
+        .updated_at = 100,
+    };
+    char note[TODO_NOTE_MAX];
+
+    GIVEN("a todo note exists");
+    reset_storage_root();
+    EXPECT_INT_EQ(storage_save_todo(test_root, &todo), 0);
+
+    WHEN("the note is replaced");
+    EXPECT_INT_EQ(storage_save_todo_note(test_root, "entry-note-edit", "# Plan\n\nWrite it down.\n"), 0);
+
+    THEN("the updated markdown can be loaded");
+    EXPECT_INT_EQ(storage_load_todo_note(test_root, "entry-note-edit", note, sizeof(note)), 0);
+    EXPECT_TRUE(strcmp(note, "# Plan\n\nWrite it down.\n") == 0);
+}
+
 SCENARIO(saving_a_todo_updates_the_existing_index_entry) {
     Todo todo = sample_todo();
     TodoIndex index = {0};
@@ -95,6 +136,8 @@ SCENARIO(saving_a_todo_updates_the_existing_index_entry) {
 
 int main(void) {
     RUN_SCENARIO(saving_a_todo_writes_index_metadata_and_item_markdown);
+    RUN_SCENARIO(saving_a_todo_creates_a_default_entry_note);
+    RUN_SCENARIO(todo_note_can_be_loaded_and_saved);
     RUN_SCENARIO(saving_a_todo_updates_the_existing_index_entry);
 
     return finish_tests();

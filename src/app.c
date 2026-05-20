@@ -133,6 +133,86 @@ static void capture_backspace(App *app) {
     app->needs_redraw = 1;
 }
 
+static TodoIndexEntry *app_selected_entry(App *app) {
+    if (
+        app->state.selected_inbox_index < 0 ||
+        app->state.selected_inbox_index >= (int)app->state.inbox.entry_count
+    ) {
+        return NULL;
+    }
+
+    return &app->state.inbox.entries[app->state.selected_inbox_index];
+}
+
+static void note_insert_char(App *app, char value) {
+    size_t length = strlen(app->state.note_text);
+    int cursor = app->state.note_cursor;
+
+    if (length + 1 >= sizeof(app->state.note_text)) {
+        return;
+    }
+    if (cursor < 0 || cursor > (int)length) {
+        cursor = (int)length;
+    }
+
+    memmove(
+        app->state.note_text + cursor + 1,
+        app->state.note_text + cursor,
+        length - (size_t)cursor + 1
+    );
+    app->state.note_text[cursor] = value;
+    app->state.note_cursor = cursor + 1;
+    app->needs_redraw = 1;
+}
+
+static void note_backspace(App *app) {
+    size_t length = strlen(app->state.note_text);
+    int cursor = app->state.note_cursor;
+
+    if (cursor <= 0 || length == 0) {
+        return;
+    }
+    if (cursor > (int)length) {
+        cursor = (int)length;
+    }
+
+    memmove(
+        app->state.note_text + cursor - 1,
+        app->state.note_text + cursor,
+        length - (size_t)cursor + 1
+    );
+    app->state.note_cursor = cursor - 1;
+    app->needs_redraw = 1;
+}
+
+static void app_open_note_editor(App *app) {
+    TodoIndexEntry *entry = app_selected_entry(app);
+
+    if (entry == NULL) {
+        return;
+    }
+    if (storage_load_todo_note(app->storage_root, entry->id, app->state.note_text, sizeof(app->state.note_text)) != 0) {
+        return;
+    }
+
+    app->state.note_cursor = (int)strlen(app->state.note_text);
+    app->state.view = APP_VIEW_NOTE_EDITOR;
+    app->needs_redraw = 1;
+}
+
+static void app_save_note_editor(App *app) {
+    TodoIndexEntry *entry = app_selected_entry(app);
+
+    if (entry == NULL) {
+        return;
+    }
+    if (storage_save_todo_note(app->storage_root, entry->id, app->state.note_text) == 0) {
+        snprintf(app->state.message, sizeof(app->state.message), "%s", "Saved");
+        app->state.view = APP_VIEW_DETAIL;
+        app->needs_redraw = 1;
+    }
+}
+
 static void app_return_to_main_menu(App *app) {
     if (app->state.view != APP_VIEW_MAIN_MENU || app->state.capture_title[0] != '\0') {
         app->state.view = APP_VIEW_MAIN_MENU;
@@ -145,6 +225,11 @@ static void app_return_to_main_menu(App *app) {
 static void app_go_back(App *app) {
     if (app->state.view == APP_VIEW_DETAIL) {
         app->state.view = APP_VIEW_INBOX;
+        app->needs_redraw = 1;
+        return;
+    }
+    if (app->state.view == APP_VIEW_NOTE_EDITOR) {
+        app->state.view = APP_VIEW_DETAIL;
         app->needs_redraw = 1;
         return;
     }
@@ -212,17 +297,46 @@ static void app_handle_inbox_key(App *app, int key) {
 void app_handle_key(App *app, int key) {
     int previous_selection = app->state.selected_menu_index;
 
-    if (key == TERMINAL_KEY_CTRL_C || key == 'q') {
+    if (key == TERMINAL_KEY_CTRL_C) {
         app->should_quit = 1;
         return;
     }
 
-    if (key == 'm' || key == 'M') {
-        app_return_to_main_menu(app);
-        return;
-    }
     if (key == TERMINAL_KEY_ESCAPE) {
         app_go_back(app);
+        return;
+    }
+
+    if (app->state.view == APP_VIEW_NOTE_EDITOR) {
+        if (key == TERMINAL_KEY_CTRL_S) {
+            app_save_note_editor(app);
+            return;
+        }
+        if (key == TERMINAL_KEY_SHIFT_ENTER || key == TERMINAL_KEY_ENTER) {
+            note_insert_char(app, '\n');
+            return;
+        }
+        if (key == TERMINAL_KEY_BACKSPACE) {
+            note_backspace(app);
+            return;
+        }
+        if (key == TERMINAL_KEY_LEFT) {
+            if (app->state.note_cursor > 0) {
+                app->state.note_cursor--;
+                app->needs_redraw = 1;
+            }
+            return;
+        }
+        if (key == TERMINAL_KEY_RIGHT) {
+            if (app->state.note_cursor < (int)strlen(app->state.note_text)) {
+                app->state.note_cursor++;
+                app->needs_redraw = 1;
+            }
+            return;
+        }
+        if (key >= 32 && key <= 126) {
+            note_insert_char(app, (char)key);
+        }
         return;
     }
 
@@ -260,11 +374,40 @@ void app_handle_key(App *app, int key) {
     }
 
     if (app->state.view == APP_VIEW_INBOX) {
+        if (key == 'q') {
+            app->should_quit = 1;
+            return;
+        }
+        if (key == 'm' || key == 'M') {
+            app_return_to_main_menu(app);
+            return;
+        }
         app_handle_inbox_key(app, key);
         return;
     }
 
     if (app->state.view == APP_VIEW_DETAIL) {
+        if (key == 'q') {
+            app->should_quit = 1;
+            return;
+        }
+        if (key == 'm' || key == 'M') {
+            app_return_to_main_menu(app);
+            return;
+        }
+        if (key != 'e' && key != 'E') {
+            return;
+        }
+        app_open_note_editor(app);
+        return;
+    }
+
+    if (key == 'q') {
+        app->should_quit = 1;
+        return;
+    }
+    if (key == 'm' || key == 'M') {
+        app_return_to_main_menu(app);
         return;
     }
 

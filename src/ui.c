@@ -1,5 +1,7 @@
 #include "ui.h"
 
+#include "markdown.h"
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -11,6 +13,11 @@ static const Clay_Color COLOR_TEXT = {234, 239, 237, 255};
 static const Clay_Color COLOR_MUTED = {143, 153, 156, 255};
 static const Clay_Color COLOR_ACCENT = {70, 221, 181, 255};
 static const Clay_Color COLOR_SELECTED = {219, 255, 242, 255};
+
+typedef struct UiBind {
+    const char *keys;
+    const char *label;
+} UiBind;
 
 static Clay_String clay_string(const char *text) {
     return (Clay_String) {
@@ -60,6 +67,110 @@ static void build_cursor_text(const AppState *state, char *out, size_t out_size)
     out[cursor] = '_';
     memcpy(out + cursor + 1, state->capture_title + cursor, length - cursor);
     out[length + 1] = '\0';
+}
+
+static void build_note_cursor_text(const AppState *state, char *out, size_t out_size) {
+    size_t length = strlen(state->note_text);
+    size_t cursor = state->note_cursor < 0 ? 0 : (size_t)state->note_cursor;
+
+    if (cursor > length) {
+        cursor = length;
+    }
+    if (out_size == 0) {
+        return;
+    }
+    if (length + 2 > out_size) {
+        length = out_size - 2;
+        if (cursor > length) {
+            cursor = length;
+        }
+    }
+
+    memcpy(out, state->note_text, cursor);
+    out[cursor] = '_';
+    memcpy(out + cursor + 1, state->note_text + cursor, length - cursor);
+    out[length + 1] = '\0';
+}
+
+static void draw_raw_text_lines(const char *text) {
+    char *line = ui_scratch_text();
+    size_t offset = 0;
+    int drawn = 0;
+
+    for (size_t i = 0; text[i] != '\0' && drawn < 16; i++) {
+        if (text[i] == '\n') {
+            line[offset] = '\0';
+            draw_text(line[0] == '\0' ? " " : line, COLOR_TEXT);
+            line = ui_scratch_text();
+            offset = 0;
+            drawn++;
+            continue;
+        }
+        if (offset + 1 < 128) {
+            line[offset++] = text[i];
+        }
+    }
+    if (offset > 0 && drawn < 16) {
+        line[offset] = '\0';
+        draw_text(line, COLOR_TEXT);
+    }
+}
+
+static const char *prefixed_markdown_text(const char *prefix, const char *value) {
+    char *text = ui_scratch_text();
+    size_t prefix_length = strlen(prefix);
+    size_t text_size = 128;
+    size_t value_size = text_size - prefix_length - 1;
+
+    snprintf(text, text_size, "%s%.*s", prefix, (int)value_size, value);
+    return text;
+}
+
+static const char *markdown_display_text(const MarkdownBlock *block) {
+    switch (block->type) {
+        case MARKDOWN_BLOCK_BLANK:
+            return " ";
+        case MARKDOWN_BLOCK_UNORDERED_LIST_ITEM:
+            return prefixed_markdown_text("- ", block->text);
+        case MARKDOWN_BLOCK_ORDERED_LIST_ITEM:
+            return prefixed_markdown_text("1. ", block->text);
+        case MARKDOWN_BLOCK_TASK_OPEN:
+            return prefixed_markdown_text("[ ] ", block->text);
+        case MARKDOWN_BLOCK_TASK_DONE:
+            return prefixed_markdown_text("[x] ", block->text);
+        case MARKDOWN_BLOCK_QUOTE:
+            return prefixed_markdown_text("> ", block->text);
+        case MARKDOWN_BLOCK_THEMATIC_BREAK:
+            return "----------------";
+        default:
+            return block->text;
+    }
+}
+
+static Clay_Color markdown_color(MarkdownBlockType type) {
+    switch (type) {
+        case MARKDOWN_BLOCK_HEADING_1:
+            return COLOR_SELECTED;
+        case MARKDOWN_BLOCK_HEADING_2:
+        case MARKDOWN_BLOCK_HEADING_3:
+        case MARKDOWN_BLOCK_THEMATIC_BREAK:
+            return COLOR_ACCENT;
+        case MARKDOWN_BLOCK_QUOTE:
+        case MARKDOWN_BLOCK_CODE:
+        case MARKDOWN_BLOCK_BLANK:
+            return COLOR_MUTED;
+        default:
+            return COLOR_TEXT;
+    }
+}
+
+static void draw_markdown_preview(const char *markdown) {
+    MarkdownDocument document = markdown_parse(markdown);
+
+    for (size_t i = 0; i < document.block_count && i < 16; i++) {
+        MarkdownBlock *block = &document.blocks[i];
+        draw_text(markdown_display_text(block), markdown_color(block->type));
+    }
 }
 
 static void draw_top_bar(const char *label) {
@@ -176,7 +287,7 @@ static void draw_menu(AppState *state, bool compact) {
     }
 }
 
-static void draw_footer(void) {
+static void draw_footer(const UiBind *binds, size_t bind_count) {
     CLAY(CLAY_ID("Footer"), {
         .layout = {
             .sizing = {
@@ -195,15 +306,22 @@ static void draw_footer(void) {
         },
         .backgroundColor = COLOR_SURFACE,
     }) {
-        draw_text("up/down", COLOR_ACCENT);
-        draw_text("move", COLOR_MUTED);
-        draw_text("1-3/enter", COLOR_ACCENT);
-        draw_text("activate", COLOR_MUTED);
-        draw_text("esc/m", COLOR_ACCENT);
-        draw_text("main", COLOR_MUTED);
-        draw_text("q/ctrl+c", COLOR_ACCENT);
-        draw_text("quit", COLOR_MUTED);
+        for (size_t i = 0; i < bind_count; i++) {
+            draw_text(binds[i].keys, COLOR_ACCENT);
+            draw_text(binds[i].label, COLOR_MUTED);
+        }
     }
+}
+
+static void draw_main_footer(void) {
+    static const UiBind binds[] = {
+        { "up/down", "move" },
+        { "1-3/enter", "activate" },
+        { "esc/m", "main" },
+        { "q/ctrl+c", "quit" },
+    };
+
+    draw_footer(binds, sizeof(binds) / sizeof(binds[0]));
 }
 
 Clay_RenderCommandArray ui_render_main_menu(AppState *state, TerminalSize terminal) {
@@ -247,101 +365,58 @@ Clay_RenderCommandArray ui_render_main_menu(AppState *state, TerminalSize termin
             draw_hero(compact);
             draw_menu(state, compact);
         }
-        draw_footer();
+        draw_main_footer();
     }
 
     return Clay_EndLayout(0.0f);
 }
 
 static void draw_capture_footer(void) {
-    CLAY(CLAY_ID("CaptureFooter"), {
-        .layout = {
-            .sizing = {
-                .width = CLAY_SIZING_GROW(0),
-                .height = CLAY_SIZING_FIXED(2),
-            },
-            .padding = {
-                .left = 3,
-                .right = 3,
-            },
-            .childAlignment = {
-                .y = CLAY_ALIGN_Y_CENTER,
-            },
-            .childGap = 3,
-        },
-        .backgroundColor = COLOR_SURFACE,
-    }) {
-        draw_text("type", COLOR_ACCENT);
-        draw_text("title", COLOR_MUTED);
-        draw_text("left/right", COLOR_ACCENT);
-        draw_text("cursor", COLOR_MUTED);
-        draw_text("backspace", COLOR_ACCENT);
-        draw_text("delete", COLOR_MUTED);
-        draw_text("enter", COLOR_ACCENT);
-        draw_text("save", COLOR_MUTED);
-        draw_text("esc/m", COLOR_ACCENT);
-        draw_text("main", COLOR_MUTED);
-        draw_text("q/ctrl+c", COLOR_ACCENT);
-        draw_text("quit", COLOR_MUTED);
-    }
+    static const UiBind binds[] = {
+        { "type", "title" },
+        { "left/right", "cursor" },
+        { "backspace", "delete" },
+        { "enter", "save" },
+        { "esc/m", "main" },
+        { "ctrl+c", "quit" },
+    };
+
+    draw_footer(binds, sizeof(binds) / sizeof(binds[0]));
 }
 
 static void draw_inbox_footer(void) {
-    CLAY(CLAY_ID("InboxFooter"), {
-        .layout = {
-            .sizing = {
-                .width = CLAY_SIZING_GROW(0),
-                .height = CLAY_SIZING_FIXED(2),
-            },
-            .padding = {
-                .left = 3,
-                .right = 3,
-            },
-            .childAlignment = {
-                .y = CLAY_ALIGN_Y_CENTER,
-            },
-            .childGap = 3,
-        },
-        .backgroundColor = COLOR_SURFACE,
-    }) {
-        draw_text("up/down", COLOR_ACCENT);
-        draw_text("move", COLOR_MUTED);
-        draw_text("enter", COLOR_ACCENT);
-        draw_text("open", COLOR_MUTED);
-        draw_text("n/1", COLOR_ACCENT);
-        draw_text("new", COLOR_MUTED);
-        draw_text("esc/m", COLOR_ACCENT);
-        draw_text("main", COLOR_MUTED);
-        draw_text("q/ctrl+c", COLOR_ACCENT);
-        draw_text("quit", COLOR_MUTED);
-    }
+    static const UiBind binds[] = {
+        { "up/down", "move" },
+        { "enter", "open" },
+        { "n/1", "new" },
+        { "esc/m", "main" },
+        { "q/ctrl+c", "quit" },
+    };
+
+    draw_footer(binds, sizeof(binds) / sizeof(binds[0]));
 }
 
 static void draw_detail_footer(void) {
-    CLAY(CLAY_ID("DetailFooter"), {
-        .layout = {
-            .sizing = {
-                .width = CLAY_SIZING_GROW(0),
-                .height = CLAY_SIZING_FIXED(2),
-            },
-            .padding = {
-                .left = 3,
-                .right = 3,
-            },
-            .childAlignment = {
-                .y = CLAY_ALIGN_Y_CENTER,
-            },
-            .childGap = 3,
-        },
-        .backgroundColor = COLOR_SURFACE,
-    }) {
-        draw_text("esc", COLOR_ACCENT);
-        draw_text("back", COLOR_MUTED);
-        draw_text("m", COLOR_ACCENT);
-        draw_text("main", COLOR_MUTED);
-        draw_text("q/ctrl+c", COLOR_ACCENT);
-        draw_text("quit", COLOR_MUTED);
-    }
+    static const UiBind binds[] = {
+        { "e", "edit" },
+        { "esc", "back" },
+        { "m", "main" },
+        { "q/ctrl+c", "quit" },
+    };
+
+    draw_footer(binds, sizeof(binds) / sizeof(binds[0]));
+}
+
+static void draw_note_editor_footer(void) {
+    static const UiBind binds[] = {
+        { "type", "text" },
+        { "shift+enter", "newline" },
+        { "ctrl+s", "save" },
+        { "esc", "back" },
+        { "ctrl+c", "quit" },
+    };
+
+    draw_footer(binds, sizeof(binds) / sizeof(binds[0]));
 }
 
 static void draw_inbox_entry(int index, const TodoIndexEntry *entry, bool selected) {
@@ -549,10 +624,89 @@ static Clay_RenderCommandArray ui_render_detail(AppState *state, TerminalSize te
                 draw_text("created", COLOR_ACCENT);
                 draw_text(created, COLOR_TEXT);
                 draw_text("markdown", COLOR_ACCENT);
-                draw_text("items/notes.md", COLOR_TEXT);
+                draw_text("notes.md", COLOR_TEXT);
+                draw_markdown_preview(state->note_text);
             }
         }
         draw_detail_footer();
+    }
+
+    return Clay_EndLayout(0.0f);
+}
+
+static Clay_RenderCommandArray ui_render_note_editor(AppState *state, TerminalSize terminal) {
+    Clay_SetLayoutDimensions((Clay_Dimensions) { .width = (float)terminal.width, .height = (float)terminal.height });
+    Clay_BeginLayout();
+
+    CLAY(CLAY_ID("NoteEditorRoot"), {
+        .layout = {
+            .sizing = {
+                .width = CLAY_SIZING_GROW(0),
+                .height = CLAY_SIZING_GROW(0),
+            },
+            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+            .padding = {
+                .left = 2,
+                .right = 2,
+                .top = 1,
+                .bottom = 1,
+            },
+            .childGap = 2,
+        },
+        .backgroundColor = COLOR_BACKGROUND,
+    }) {
+        draw_top_bar("editor");
+        CLAY(CLAY_ID("NoteEditorBody"), {
+            .layout = {
+                .sizing = {
+                    .width = CLAY_SIZING_GROW(0),
+                    .height = CLAY_SIZING_GROW(0),
+                },
+                .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                .padding = {
+                    .left = 3,
+                    .right = 3,
+                    .top = 2,
+                },
+                .childGap = 2,
+            },
+        }) {
+            CLAY(CLAY_ID("NoteEditorTextArea"), {
+                .layout = {
+                    .sizing = {
+                        .width = CLAY_SIZING_GROW(0),
+                        .height = CLAY_SIZING_GROW(0),
+                    },
+                    .padding = {
+                        .left = 2,
+                        .right = 2,
+                        .top = 1,
+                    },
+                },
+                .backgroundColor = COLOR_SURFACE_ACTIVE,
+            }) {
+                char text[TODO_NOTE_MAX + 2];
+                build_note_cursor_text(state, text, sizeof(text));
+                draw_raw_text_lines(text);
+            }
+            CLAY(CLAY_ID("NoteEditorSaveButton"), {
+                .layout = {
+                    .sizing = {
+                        .width = CLAY_SIZING_FIT(0),
+                        .height = CLAY_SIZING_FIXED(3),
+                    },
+                    .padding = {
+                        .left = 2,
+                        .right = 2,
+                        .top = 1,
+                    },
+                },
+                .backgroundColor = COLOR_SURFACE,
+            }) {
+                draw_text("[ Save ]", COLOR_ACCENT);
+            }
+        }
+        draw_note_editor_footer();
     }
 
     return Clay_EndLayout(0.0f);
@@ -567,6 +721,9 @@ Clay_RenderCommandArray ui_render_app(AppState *state, TerminalSize terminal) {
     }
     if (state->view == APP_VIEW_DETAIL) {
         return ui_render_detail(state, terminal);
+    }
+    if (state->view == APP_VIEW_NOTE_EDITOR) {
+        return ui_render_note_editor(state, terminal);
     }
 
     return ui_render_main_menu(state, terminal);

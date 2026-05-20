@@ -6,6 +6,7 @@
 #define TODO_ID_MAX 32
 #define TODO_TITLE_MAX 128
 #define TODO_TEXT_MAX 256
+#define TODO_NOTE_MAX 4096
 #define TODO_PATH_MAX 512
 #define TODO_MAX_ITEMS 128
 #define TODO_INDEX_MAX_ENTRIES 1024
@@ -43,6 +44,9 @@ typedef struct TodoIndex {
 
 int storage_save_todo(const char *root, const Todo *todo);
 int storage_load_index(const char *root, TodoIndex *index);
+int storage_todo_note_path(const char *root, const char *todo_id, char *out, size_t out_size);
+int storage_load_todo_note(const char *root, const char *todo_id, char *out, size_t out_size);
+int storage_save_todo_note(const char *root, const char *todo_id, const char *content);
 int storage_markdown_path(const char *root, const char *todo_id, const char *item_id, char *out, size_t out_size);
 
 #endif
