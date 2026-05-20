@@ -1,0 +1,172 @@
+#define _POSIX_C_SOURCE 200112L
+
+#include "test.h"
+
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define CLAY_IMPLEMENTATION
+#include "../vendor/clay/clay.h"
+
+#include "../src/terminal.h"
+#include "../src/ui.h"
+
+static void handle_clay_error(Clay_ErrorData error_data) {
+    fprintf(stderr, "Clay error: %.*s\n", error_data.errorText.length, error_data.errorText.chars);
+    test_failures++;
+}
+
+static Clay_Dimensions measure_text(Clay_StringSlice text, Clay_TextElementConfig *config, void *user_data) {
+    (void)config;
+    (void)user_data;
+
+    return (Clay_Dimensions) {
+        .width = (float)text.length,
+        .height = 1.0f,
+    };
+}
+
+static void setup_clay(TerminalSize terminal) {
+    static void *memory = NULL;
+    static uint32_t memory_size = 0;
+
+    if (memory == NULL) {
+        memory_size = Clay_MinMemorySize();
+        memory = malloc(memory_size);
+        if (memory == NULL) {
+            fprintf(stderr, "failed to allocate Clay test memory\n");
+            exit(1);
+        }
+    }
+
+    Clay_Arena arena = Clay_CreateArenaWithCapacityAndMemory(memory_size, memory);
+    Clay_Initialize(
+        arena,
+        (Clay_Dimensions) { .width = (float)terminal.width, .height = (float)terminal.height },
+        (Clay_ErrorHandler) { .errorHandlerFunction = handle_clay_error }
+    );
+    Clay_SetMeasureTextFunction(measure_text, NULL);
+}
+
+static int text_equals(Clay_StringSlice text, const char *expected) {
+    size_t expected_length = strlen(expected);
+    return text.length == (int32_t)expected_length && strncmp(text.chars, expected, expected_length) == 0;
+}
+
+static int render_contains_text(Clay_RenderCommandArray commands, const char *expected) {
+    for (int32_t i = 0; i < commands.length; i++) {
+        Clay_RenderCommand *command = Clay_RenderCommandArray_Get(&commands, i);
+        if (
+            command->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT &&
+            text_equals(command->renderData.text.stringContents, expected)
+        ) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static Clay_RenderCommand *find_text_command(Clay_RenderCommandArray commands, const char *expected) {
+    for (int32_t i = 0; i < commands.length; i++) {
+        Clay_RenderCommand *command = Clay_RenderCommandArray_Get(&commands, i);
+        if (
+            command->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT &&
+            text_equals(command->renderData.text.stringContents, expected)
+        ) {
+            return command;
+        }
+    }
+
+    return NULL;
+}
+
+static int render_has_full_width_rectangle(Clay_RenderCommandArray commands, int width) {
+    for (int32_t i = 0; i < commands.length; i++) {
+        Clay_RenderCommand *command = Clay_RenderCommandArray_Get(&commands, i);
+        if (
+            command->commandType == CLAY_RENDER_COMMAND_TYPE_RECTANGLE &&
+            (int)(command->boundingBox.width + 0.5f) == width
+        ) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+SCENARIO(main_menu_contains_the_core_actions) {
+    TerminalSize terminal = { .width = 160, .height = 50 };
+    AppState state = { .selected_menu_index = 0 };
+
+    GIVEN("a wide terminal");
+    setup_clay(terminal);
+
+    WHEN("the main menu is rendered");
+    Clay_RenderCommandArray commands = ui_render_main_menu(&state, terminal);
+
+    THEN("the brand and every menu action are present");
+    EXPECT_TRUE(render_contains_text(commands, "tui-do"));
+    EXPECT_TRUE(render_contains_text(commands, "Create a new to-do"));
+    EXPECT_TRUE(render_contains_text(commands, "Load a to-do"));
+    EXPECT_TRUE(render_contains_text(commands, "Quit"));
+    EXPECT_TRUE(render_contains_text(commands, "q"));
+    EXPECT_TRUE(render_contains_text(commands, "quit"));
+}
+
+SCENARIO(main_menu_paints_the_full_terminal_width) {
+    TerminalSize terminal = { .width = 160, .height = 50 };
+    AppState state = { .selected_menu_index = 0 };
+
+    GIVEN("a terminal much wider than eighty columns");
+    setup_clay(terminal);
+
+    WHEN("the main menu is rendered");
+    Clay_RenderCommandArray commands = ui_render_main_menu(&state, terminal);
+
+    THEN("at least one background rectangle spans the actual terminal width");
+    EXPECT_TRUE(render_has_full_width_rectangle(commands, terminal.width));
+}
+
+SCENARIO(selected_menu_item_follows_state) {
+    TerminalSize terminal = { .width = 120, .height = 40 };
+    AppState state = { .selected_menu_index = 1 };
+
+    GIVEN("the second menu item is selected");
+    setup_clay(terminal);
+
+    WHEN("the main menu is rendered");
+    Clay_RenderCommandArray commands = ui_render_main_menu(&state, terminal);
+
+    THEN("the visible selection marker is aligned with Load a to-do");
+    Clay_RenderCommand *marker = find_text_command(commands, ">");
+    Clay_RenderCommand *load = find_text_command(commands, "Load a to-do");
+    EXPECT_TRUE(marker != NULL);
+    EXPECT_TRUE(load != NULL);
+    if (marker != NULL && load != NULL) {
+        EXPECT_INT_EQ((int)(marker->boundingBox.y + 0.5f), (int)(load->boundingBox.y + 0.5f));
+    }
+}
+
+SCENARIO(terminal_size_honors_large_environment_dimensions) {
+    GIVEN("COLUMNS and LINES describe a large terminal");
+    setenv("COLUMNS", "160", 1);
+    setenv("LINES", "50", 1);
+
+    WHEN("the terminal size is resolved");
+    TerminalSize terminal = terminal_get_size();
+
+    THEN("the resolved size is not clamped to the fallback dimensions");
+    EXPECT_INT_GE(terminal.width, 160);
+    EXPECT_INT_GE(terminal.height, 50);
+}
+
+int main(void) {
+    RUN_SCENARIO(main_menu_contains_the_core_actions);
+    RUN_SCENARIO(main_menu_paints_the_full_terminal_width);
+    RUN_SCENARIO(selected_menu_item_follows_state);
+    RUN_SCENARIO(terminal_size_honors_large_environment_dimensions);
+
+    return finish_tests();
+}
