@@ -110,6 +110,28 @@ SCENARIO(menu_quick_select_keys_jump_to_items) {
     EXPECT_INT_EQ(app.needs_redraw, 1);
 }
 
+SCENARIO(menu_number_keys_activate_their_items_without_enter) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.needs_redraw = 0;
+
+    GIVEN("the main menu is open");
+
+    WHEN("the user presses 1");
+    app_handle_key(&app, '1');
+
+    THEN("the Create action opens capture immediately");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_CAPTURE);
+    EXPECT_INT_EQ(app.needs_redraw, 1);
+
+    WHEN("the user returns to main and presses 3");
+    app.state.view = APP_VIEW_MAIN_MENU;
+    app.needs_redraw = 0;
+    app_handle_key(&app, '3');
+
+    THEN("the Quit action requests termination immediately");
+    EXPECT_INT_EQ(app.should_quit, 1);
+}
+
 SCENARIO(menu_quit_keys_request_termination) {
     App app = app_create((TerminalSize) { .width = 100, .height = 30 });
 
@@ -236,6 +258,41 @@ SCENARIO(capture_view_saves_a_new_inbox_todo) {
     EXPECT_INT_EQ((int)index.entries[0].updated_at, 1234);
 }
 
+SCENARIO(escape_goes_back_to_the_previous_screen) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_CAPTURE;
+    app.needs_redraw = 0;
+    app_handle_key(&app, 'A');
+
+    GIVEN("the capture view is open with unsaved text");
+
+    WHEN("the user presses Escape");
+    app_handle_key(&app, TERMINAL_KEY_ESCAPE);
+
+    THEN("the app returns to the main menu and clears capture input");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_MAIN_MENU);
+    EXPECT_TRUE(strcmp(app.state.capture_title, "") == 0);
+    EXPECT_INT_EQ(app.state.capture_cursor, 0);
+    EXPECT_INT_EQ(app.needs_redraw, 1);
+}
+
+SCENARIO(main_menu_key_returns_to_main_from_any_screen) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_CAPTURE;
+    app.needs_redraw = 0;
+    app_handle_key(&app, 'A');
+
+    GIVEN("the user is away from the main menu");
+
+    WHEN("the user presses m");
+    app_handle_key(&app, 'm');
+
+    THEN("the app returns to the main menu");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_MAIN_MENU);
+    EXPECT_TRUE(strcmp(app.state.capture_title, "") == 0);
+    EXPECT_INT_EQ(app.needs_redraw, 1);
+}
+
 int main(void) {
     RUN_SCENARIO(app_marks_itself_for_redraw_when_the_terminal_resizes);
     RUN_SCENARIO(app_does_not_redraw_when_the_terminal_size_is_unchanged);
@@ -243,6 +300,7 @@ int main(void) {
     RUN_SCENARIO(app_uses_the_latest_size_after_noisy_resize_events);
     RUN_SCENARIO(menu_navigation_wraps_with_arrow_keys);
     RUN_SCENARIO(menu_quick_select_keys_jump_to_items);
+    RUN_SCENARIO(menu_number_keys_activate_their_items_without_enter);
     RUN_SCENARIO(menu_quit_keys_request_termination);
     RUN_SCENARIO(selecting_create_opens_the_capture_view);
     RUN_SCENARIO(capture_view_edits_the_title_buffer);
@@ -250,6 +308,8 @@ int main(void) {
     RUN_SCENARIO(capture_view_backspace_removes_before_cursor);
     RUN_SCENARIO(capture_view_does_not_save_empty_titles);
     RUN_SCENARIO(capture_view_saves_a_new_inbox_todo);
+    RUN_SCENARIO(escape_goes_back_to_the_previous_screen);
+    RUN_SCENARIO(main_menu_key_returns_to_main_from_any_screen);
 
     return finish_tests();
 }

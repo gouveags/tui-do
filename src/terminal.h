@@ -11,6 +11,7 @@
 #define TERMINAL_KEY_BACKSPACE 1004
 #define TERMINAL_KEY_LEFT 1005
 #define TERMINAL_KEY_RIGHT 1006
+#define TERMINAL_KEY_ESCAPE 1007
 
 typedef struct TerminalSize {
     int width;

@@ -103,11 +103,40 @@ static void capture_backspace(App *app) {
     app->needs_redraw = 1;
 }
 
+static void app_return_to_main_menu(App *app) {
+    if (app->state.view != APP_VIEW_MAIN_MENU || app->state.capture_title[0] != '\0') {
+        app->state.view = APP_VIEW_MAIN_MENU;
+        app->state.capture_title[0] = '\0';
+        app->state.capture_cursor = 0;
+        app->needs_redraw = 1;
+    }
+}
+
+static void app_activate_menu_item(App *app, int index) {
+    app->state.selected_menu_index = index;
+
+    if (index == 0) {
+        app->state.view = APP_VIEW_CAPTURE;
+        app->state.capture_title[0] = '\0';
+        app->state.capture_cursor = 0;
+        app->needs_redraw = 1;
+    } else if (index == 2) {
+        app->should_quit = 1;
+    } else {
+        app->needs_redraw = 1;
+    }
+}
+
 void app_handle_key(App *app, int key) {
     int previous_selection = app->state.selected_menu_index;
 
     if (key == TERMINAL_KEY_CTRL_C || key == 'q') {
         app->should_quit = 1;
+        return;
+    }
+
+    if (key == TERMINAL_KEY_ESCAPE || key == 'm' || key == 'M') {
+        app_return_to_main_menu(app);
         return;
     }
 
@@ -162,16 +191,11 @@ void app_handle_key(App *app, int key) {
     } else if (key == TERMINAL_KEY_DOWN) {
         app->state.selected_menu_index = (app->state.selected_menu_index + 1) % 3;
     } else if (key >= '1' && key <= '3') {
-        app->state.selected_menu_index = key - '1';
+        app_activate_menu_item(app, key - '1');
+        return;
     } else if (key == TERMINAL_KEY_ENTER) {
-        if (app->state.selected_menu_index == 0) {
-            app->state.view = APP_VIEW_CAPTURE;
-            app->state.capture_title[0] = '\0';
-            app->state.capture_cursor = 0;
-            app->needs_redraw = 1;
-        } else if (app->state.selected_menu_index == 2) {
-            app->should_quit = 1;
-        }
+        app_activate_menu_item(app, app->state.selected_menu_index);
+        return;
     }
 
     if (previous_selection != app->state.selected_menu_index) {

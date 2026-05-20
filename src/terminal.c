@@ -157,6 +157,9 @@ int terminal_decode_key_sequence(const unsigned char *bytes, int length) {
         if (bytes[0] == 3) {
             return TERMINAL_KEY_CTRL_C;
         }
+        if (bytes[0] == 27) {
+            return TERMINAL_KEY_ESCAPE;
+        }
         if (bytes[0] == 127 || bytes[0] == 8) {
             return TERMINAL_KEY_BACKSPACE;
         }
