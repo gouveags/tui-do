@@ -68,6 +68,31 @@ static int render_contains_text(Clay_RenderCommandArray commands, const char *ex
     return 0;
 }
 
+static int render_contains_text_fragment(Clay_RenderCommandArray commands, const char *expected) {
+    size_t expected_length = strlen(expected);
+
+    for (int32_t i = 0; i < commands.length; i++) {
+        Clay_RenderCommand *command = Clay_RenderCommandArray_Get(&commands, i);
+        Clay_StringSlice text;
+
+        if (command->commandType != CLAY_RENDER_COMMAND_TYPE_TEXT) {
+            continue;
+        }
+        text = command->renderData.text.stringContents;
+        if ((size_t)text.length < expected_length) {
+            continue;
+        }
+
+        for (int32_t start = 0; start <= text.length - (int32_t)expected_length; start++) {
+            if (strncmp(text.chars + start, expected, expected_length) == 0) {
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
 static Clay_RenderCommand *find_text_command(Clay_RenderCommandArray commands, const char *expected) {
     for (int32_t i = 0; i < commands.length; i++) {
         Clay_RenderCommand *command = Clay_RenderCommandArray_Get(&commands, i);
@@ -179,12 +204,31 @@ SCENARIO(terminal_size_resolution_does_not_clamp_to_a_minimum) {
     EXPECT_INT_EQ(terminal.height, 12);
 }
 
+SCENARIO(capture_input_renders_a_visible_cursor) {
+    TerminalSize terminal = { .width = 120, .height = 40 };
+    AppState state = {
+        .view = APP_VIEW_CAPTURE,
+        .capture_title = "AC",
+        .capture_cursor = 1,
+    };
+
+    GIVEN("the capture title cursor is between two characters");
+    setup_clay(terminal);
+
+    WHEN("the capture screen is rendered");
+    Clay_RenderCommandArray commands = ui_render_app(&state, terminal);
+
+    THEN("the input text includes a visible cursor marker");
+    EXPECT_TRUE(render_contains_text_fragment(commands, "A_C"));
+}
+
 int main(void) {
     RUN_SCENARIO(main_menu_contains_the_core_actions);
     RUN_SCENARIO(main_menu_paints_the_full_terminal_width);
     RUN_SCENARIO(selected_menu_item_follows_state);
     RUN_SCENARIO(terminal_size_honors_large_environment_dimensions);
     RUN_SCENARIO(terminal_size_resolution_does_not_clamp_to_a_minimum);
+    RUN_SCENARIO(capture_input_renders_a_visible_cursor);
 
     return finish_tests();
 }

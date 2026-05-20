@@ -8,6 +8,9 @@
 #define TERMINAL_KEY_DOWN 1001
 #define TERMINAL_KEY_ENTER 1002
 #define TERMINAL_KEY_CTRL_C 1003
+#define TERMINAL_KEY_BACKSPACE 1004
+#define TERMINAL_KEY_LEFT 1005
+#define TERMINAL_KEY_RIGHT 1006
 
 typedef struct TerminalSize {
     int width;

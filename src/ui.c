@@ -28,7 +28,31 @@ static void draw_text(const char *text, Clay_Color color) {
     );
 }
 
-static void draw_top_bar(void) {
+static void build_cursor_text(const AppState *state, char *out, size_t out_size) {
+    size_t length = strlen(state->capture_title);
+    size_t cursor = state->capture_cursor < 0 ? 0 : (size_t)state->capture_cursor;
+
+    if (cursor > length) {
+        cursor = length;
+    }
+    if (out_size == 0) {
+        return;
+    }
+
+    if (length + 2 > out_size) {
+        length = out_size - 2;
+        if (cursor > length) {
+            cursor = length;
+        }
+    }
+
+    memcpy(out, state->capture_title, cursor);
+    out[cursor] = '_';
+    memcpy(out + cursor + 1, state->capture_title + cursor, length - cursor);
+    out[length + 1] = '\0';
+}
+
+static void draw_top_bar(const char *label) {
     CLAY(CLAY_ID("TopBar"), {
         .layout = {
             .sizing = {
@@ -55,7 +79,7 @@ static void draw_top_bar(void) {
                 },
             },
         }) {}
-        draw_text("main menu", COLOR_MUTED);
+        draw_text(label, COLOR_MUTED);
     }
 }
 
@@ -195,7 +219,7 @@ Clay_RenderCommandArray ui_render_main_menu(AppState *state, TerminalSize termin
         },
         .backgroundColor = COLOR_BACKGROUND,
     }) {
-        draw_top_bar();
+        draw_top_bar("main menu");
         CLAY(CLAY_ID("Body"), {
             .layout = {
                 .sizing = {
@@ -217,4 +241,105 @@ Clay_RenderCommandArray ui_render_main_menu(AppState *state, TerminalSize termin
     }
 
     return Clay_EndLayout(0.0f);
+}
+
+static void draw_capture_footer(void) {
+    CLAY(CLAY_ID("CaptureFooter"), {
+        .layout = {
+            .sizing = {
+                .width = CLAY_SIZING_GROW(0),
+                .height = CLAY_SIZING_FIXED(2),
+            },
+            .padding = {
+                .left = 3,
+                .right = 3,
+            },
+            .childAlignment = {
+                .y = CLAY_ALIGN_Y_CENTER,
+            },
+            .childGap = 3,
+        },
+        .backgroundColor = COLOR_SURFACE,
+    }) {
+        draw_text("type", COLOR_ACCENT);
+        draw_text("capture title", COLOR_MUTED);
+        draw_text("enter", COLOR_ACCENT);
+        draw_text("save", COLOR_MUTED);
+        draw_text("ctrl+c", COLOR_ACCENT);
+        draw_text("quit", COLOR_MUTED);
+    }
+}
+
+static Clay_RenderCommandArray ui_render_capture(AppState *state, TerminalSize terminal) {
+    Clay_SetLayoutDimensions((Clay_Dimensions) { .width = (float)terminal.width, .height = (float)terminal.height });
+    Clay_BeginLayout();
+
+    CLAY(CLAY_ID("CaptureRoot"), {
+        .layout = {
+            .sizing = {
+                .width = CLAY_SIZING_GROW(0),
+                .height = CLAY_SIZING_GROW(0),
+            },
+            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+            .padding = {
+                .left = 2,
+                .right = 2,
+                .top = 1,
+                .bottom = 1,
+            },
+            .childGap = 2,
+        },
+        .backgroundColor = COLOR_BACKGROUND,
+    }) {
+        draw_top_bar("capture");
+        CLAY(CLAY_ID("CaptureBody"), {
+            .layout = {
+                .sizing = {
+                    .width = CLAY_SIZING_GROW(0),
+                    .height = CLAY_SIZING_GROW(0),
+                },
+                .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                .childGap = 2,
+                .childAlignment = {
+                    .x = CLAY_ALIGN_X_CENTER,
+                    .y = CLAY_ALIGN_Y_CENTER,
+                },
+            },
+        }) {
+            draw_text("Capture a new notebook entry", COLOR_SELECTED);
+            draw_text("Write the thing before it evaporates.", COLOR_MUTED);
+            CLAY(CLAY_ID("CaptureInput"), {
+                .layout = {
+                    .sizing = {
+                        .width = CLAY_SIZING_PERCENT(0.72f),
+                        .height = CLAY_SIZING_FIXED(5),
+                    },
+                    .padding = {
+                        .left = 2,
+                        .right = 2,
+                        .top = 1,
+                    },
+                    .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                    .childGap = 1,
+                },
+                .backgroundColor = COLOR_SURFACE_ACTIVE,
+            }) {
+                char input_text[sizeof(state->capture_title) + 2];
+                build_cursor_text(state, input_text, sizeof(input_text));
+                draw_text("Title", COLOR_ACCENT);
+                draw_text(input_text, COLOR_TEXT);
+            }
+        }
+        draw_capture_footer();
+    }
+
+    return Clay_EndLayout(0.0f);
+}
+
+Clay_RenderCommandArray ui_render_app(AppState *state, TerminalSize terminal) {
+    if (state->view == APP_VIEW_CAPTURE) {
+        return ui_render_capture(state, terminal);
+    }
+
+    return ui_render_main_menu(state, terminal);
 }

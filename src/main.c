@@ -73,7 +73,7 @@ int main(void) {
         app_observe_terminal_size(&app, terminal_get_size());
 
         if (app.needs_redraw) {
-            Clay_RenderCommandArray commands = ui_render_main_menu(&app.state, app.terminal);
+            Clay_RenderCommandArray commands = ui_render_app(&app.state, app.terminal);
             terminal_render(commands, app.terminal);
             app.needs_redraw = 0;
         }

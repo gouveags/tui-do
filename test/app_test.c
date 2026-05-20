@@ -1,6 +1,10 @@
 #include "test.h"
 
+#include <string.h>
+#include <stdlib.h>
+
 #include "../src/app.h"
+#include "../src/storage.h"
 
 SCENARIO(app_marks_itself_for_redraw_when_the_terminal_resizes) {
     App app = app_create((TerminalSize) { .width = 160, .height = 50 });
@@ -118,6 +122,120 @@ SCENARIO(menu_quit_keys_request_termination) {
     EXPECT_INT_EQ(app.should_quit, 1);
 }
 
+SCENARIO(selecting_create_opens_the_capture_view) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.needs_redraw = 0;
+
+    GIVEN("the Create menu item is selected");
+
+    WHEN("the user presses Enter");
+    app_handle_key(&app, TERMINAL_KEY_ENTER);
+
+    THEN("the app opens the capture view");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_CAPTURE);
+    EXPECT_INT_EQ(app.needs_redraw, 1);
+}
+
+SCENARIO(capture_view_edits_the_title_buffer) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_CAPTURE;
+
+    GIVEN("the capture view is open");
+
+    WHEN("the user types and corrects a title");
+    app_handle_key(&app, 'B');
+    app_handle_key(&app, 'u');
+    app_handle_key(&app, 'g');
+    app_handle_key(&app, TERMINAL_KEY_BACKSPACE);
+    app_handle_key(&app, 'y');
+
+    THEN("the title buffer reflects the edit");
+    EXPECT_TRUE(strcmp(app.state.capture_title, "Buy") == 0);
+}
+
+SCENARIO(capture_view_moves_the_cursor_and_inserts_at_cursor) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_CAPTURE;
+
+    GIVEN("the capture view has text");
+    app_handle_key(&app, 'A');
+    app_handle_key(&app, 'C');
+
+    WHEN("the user moves left and types");
+    app_handle_key(&app, TERMINAL_KEY_LEFT);
+    app_handle_key(&app, 'B');
+
+    THEN("the character is inserted at the cursor");
+    EXPECT_TRUE(strcmp(app.state.capture_title, "ABC") == 0);
+    EXPECT_INT_EQ(app.state.capture_cursor, 2);
+
+    WHEN("the user moves right");
+    app_handle_key(&app, TERMINAL_KEY_RIGHT);
+
+    THEN("the cursor moves toward the end of the input");
+    EXPECT_INT_EQ(app.state.capture_cursor, 3);
+}
+
+SCENARIO(capture_view_backspace_removes_before_cursor) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_CAPTURE;
+
+    GIVEN("the cursor is in the middle of the input");
+    app_handle_key(&app, 'A');
+    app_handle_key(&app, 'B');
+    app_handle_key(&app, 'C');
+    app_handle_key(&app, TERMINAL_KEY_LEFT);
+
+    WHEN("the user presses backspace");
+    app_handle_key(&app, TERMINAL_KEY_BACKSPACE);
+
+    THEN("the character before the cursor is removed");
+    EXPECT_TRUE(strcmp(app.state.capture_title, "AC") == 0);
+    EXPECT_INT_EQ(app.state.capture_cursor, 1);
+}
+
+SCENARIO(capture_view_does_not_save_empty_titles) {
+    App app = app_create_with_storage((TerminalSize) { .width = 100, .height = 30 }, "build/app-capture-empty");
+    TodoIndex index = {0};
+
+    GIVEN("the capture view is open with an empty title");
+    system("rm -rf build/app-capture-empty");
+    app.state.view = APP_VIEW_CAPTURE;
+
+    WHEN("the user presses Enter");
+    app_handle_key(&app, TERMINAL_KEY_ENTER);
+
+    THEN("the app remains in capture and no todo is saved");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_CAPTURE);
+    EXPECT_INT_EQ(storage_load_index("build/app-capture-empty", &index), 0);
+    EXPECT_INT_EQ((int)index.entry_count, 0);
+}
+
+SCENARIO(capture_view_saves_a_new_inbox_todo) {
+    App app = app_create_with_storage((TerminalSize) { .width = 100, .height = 30 }, "build/app-capture-save");
+    TodoIndex index = {0};
+
+    GIVEN("the capture view has a title");
+    system("rm -rf build/app-capture-save");
+    app.state.view = APP_VIEW_CAPTURE;
+    app.now = 1234;
+    app_handle_key(&app, 'F');
+    app_handle_key(&app, 'i');
+    app_handle_key(&app, 'x');
+
+    WHEN("the user presses Enter");
+    app_handle_key(&app, TERMINAL_KEY_ENTER);
+
+    THEN("the todo is saved and the app returns to the main menu");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_MAIN_MENU);
+    EXPECT_TRUE(strcmp(app.state.capture_title, "") == 0);
+    EXPECT_INT_EQ(storage_load_index("build/app-capture-save", &index), 0);
+    EXPECT_INT_EQ((int)index.entry_count, 1);
+    EXPECT_TRUE(strcmp(index.entries[0].title, "Fix") == 0);
+    EXPECT_INT_EQ((int)index.entries[0].created_at, 1234);
+    EXPECT_INT_EQ((int)index.entries[0].updated_at, 1234);
+}
+
 int main(void) {
     RUN_SCENARIO(app_marks_itself_for_redraw_when_the_terminal_resizes);
     RUN_SCENARIO(app_does_not_redraw_when_the_terminal_size_is_unchanged);
@@ -126,6 +244,12 @@ int main(void) {
     RUN_SCENARIO(menu_navigation_wraps_with_arrow_keys);
     RUN_SCENARIO(menu_quick_select_keys_jump_to_items);
     RUN_SCENARIO(menu_quit_keys_request_termination);
+    RUN_SCENARIO(selecting_create_opens_the_capture_view);
+    RUN_SCENARIO(capture_view_edits_the_title_buffer);
+    RUN_SCENARIO(capture_view_moves_the_cursor_and_inserts_at_cursor);
+    RUN_SCENARIO(capture_view_backspace_removes_before_cursor);
+    RUN_SCENARIO(capture_view_does_not_save_empty_titles);
+    RUN_SCENARIO(capture_view_saves_a_new_inbox_todo);
 
     return finish_tests();
 }

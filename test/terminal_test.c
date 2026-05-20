@@ -46,6 +46,8 @@ SCENARIO(key_polling_can_return_without_input) {
 SCENARIO(terminal_decodes_arrow_keys_and_ctrl_c) {
     const unsigned char up[] = {27, '[', 'A'};
     const unsigned char down[] = {27, '[', 'B'};
+    const unsigned char right[] = {27, '[', 'C'};
+    const unsigned char left[] = {27, '[', 'D'};
     const unsigned char ctrl_c[] = {3};
 
     GIVEN("raw terminal key bytes");
@@ -55,6 +57,8 @@ SCENARIO(terminal_decodes_arrow_keys_and_ctrl_c) {
     THEN("navigation and termination keys are semantic");
     EXPECT_INT_EQ(terminal_decode_key_sequence(up, 3), TERMINAL_KEY_UP);
     EXPECT_INT_EQ(terminal_decode_key_sequence(down, 3), TERMINAL_KEY_DOWN);
+    EXPECT_INT_EQ(terminal_decode_key_sequence(left, 3), TERMINAL_KEY_LEFT);
+    EXPECT_INT_EQ(terminal_decode_key_sequence(right, 3), TERMINAL_KEY_RIGHT);
     EXPECT_INT_EQ(terminal_decode_key_sequence(ctrl_c, 1), TERMINAL_KEY_CTRL_C);
 }
 

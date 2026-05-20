@@ -157,6 +157,9 @@ int terminal_decode_key_sequence(const unsigned char *bytes, int length) {
         if (bytes[0] == 3) {
             return TERMINAL_KEY_CTRL_C;
         }
+        if (bytes[0] == 127 || bytes[0] == 8) {
+            return TERMINAL_KEY_BACKSPACE;
+        }
         if (bytes[0] == '\r' || bytes[0] == '\n') {
             return TERMINAL_KEY_ENTER;
         }
@@ -169,6 +172,12 @@ int terminal_decode_key_sequence(const unsigned char *bytes, int length) {
         }
         if (bytes[2] == 'B') {
             return TERMINAL_KEY_DOWN;
+        }
+        if (bytes[2] == 'C') {
+            return TERMINAL_KEY_RIGHT;
+        }
+        if (bytes[2] == 'D') {
+            return TERMINAL_KEY_LEFT;
         }
     }
 
