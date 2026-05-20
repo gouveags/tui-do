@@ -22,6 +22,8 @@ typedef struct AppState {
     int capture_cursor;
     char note_text[TODO_NOTE_MAX];
     int note_cursor;
+    int note_scroll_line;
+    int detail_scroll_line;
     char message[128];
 } AppState;
 

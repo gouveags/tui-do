@@ -17,6 +17,13 @@ typedef struct TerminalCell {
     Clay_Color background;
 } TerminalCell;
 
+typedef struct TerminalClip {
+    int x;
+    int y;
+    int width;
+    int height;
+} TerminalClip;
+
 static struct termios original_terminal_mode;
 static int raw_mode_enabled = 0;
 
@@ -93,11 +100,11 @@ TerminalSize terminal_get_size(void) {
 }
 
 const char *terminal_enter_fullscreen_sequence(void) {
-    return "\033[>4;1m\033[?1049h\033[?25l\033[2J\033[H";
+    return "\033[>4;1m\033[?1000h\033[?1006h\033[?1049h\033[?25l\033[2J\033[H";
 }
 
 const char *terminal_leave_fullscreen_sequence(void) {
-    return "\033[?25h\033[?1049l\033[>4;0m";
+    return "\033[?25h\033[?1049l\033[?1006l\033[?1000l\033[>4;0m";
 }
 
 void terminal_enter_fullscreen(void) {
@@ -170,6 +177,9 @@ int terminal_try_read_key_from_fd(int fd) {
 }
 
 int terminal_decode_key_sequence(const unsigned char *bytes, int length) {
+    int mouse_code = 0;
+    char sequence[17];
+
     if (bytes == NULL || length <= 0) {
         return TERMINAL_KEY_NONE;
     }
@@ -205,6 +215,28 @@ int terminal_decode_key_sequence(const unsigned char *bytes, int length) {
         }
         if (bytes[2] == 'D') {
             return TERMINAL_KEY_LEFT;
+        }
+        if (bytes[2] == '5' && length >= 4 && bytes[3] == '~') {
+            return TERMINAL_KEY_PAGE_UP;
+        }
+        if (bytes[2] == '6' && length >= 4 && bytes[3] == '~') {
+            return TERMINAL_KEY_PAGE_DOWN;
+        }
+        if (
+            bytes[2] == '<' &&
+            length >= 6 &&
+            length < (int)sizeof(sequence)
+        ) {
+            memcpy(sequence, bytes, (size_t)length);
+            sequence[length] = '\0';
+            if (sscanf(sequence + 3, "%d;", &mouse_code) == 1) {
+                if (mouse_code == 64) {
+                    return TERMINAL_KEY_MOUSE_WHEEL_UP;
+                }
+                if (mouse_code == 65) {
+                    return TERMINAL_KEY_MOUSE_WHEEL_DOWN;
+                }
+            }
         }
     }
 
@@ -258,7 +290,32 @@ static TerminalCell *screen_cell(TerminalCell *screen, TerminalSize terminal, in
     return &screen[(y * (terminal.width + 1)) + x];
 }
 
-static void draw_rectangle(TerminalCell *screen, TerminalSize terminal, Clay_RenderCommand *command) {
+static int point_is_inside_clip(int x, int y, TerminalClip clip) {
+    return x >= clip.x && x < clip.x + clip.width && y >= clip.y && y < clip.y + clip.height;
+}
+
+static TerminalClip terminal_clip_intersection(TerminalClip a, TerminalClip b) {
+    int left = a.x > b.x ? a.x : b.x;
+    int top = a.y > b.y ? a.y : b.y;
+    int right = a.x + a.width < b.x + b.width ? a.x + a.width : b.x + b.width;
+    int bottom = a.y + a.height < b.y + b.height ? a.y + a.height : b.y + b.height;
+
+    if (right < left) {
+        right = left;
+    }
+    if (bottom < top) {
+        bottom = top;
+    }
+
+    return (TerminalClip) {
+        .x = left,
+        .y = top,
+        .width = right - left,
+        .height = bottom - top,
+    };
+}
+
+static void draw_rectangle(TerminalCell *screen, TerminalSize terminal, Clay_RenderCommand *command, TerminalClip clip) {
     Clay_Color color = command->renderData.rectangle.backgroundColor;
     int start_x = (int)(command->boundingBox.x + 0.5f);
     int start_y = (int)(command->boundingBox.y + 0.5f);
@@ -273,12 +330,15 @@ static void draw_rectangle(TerminalCell *screen, TerminalSize terminal, Clay_Ren
             if (x < 0 || x >= terminal.width) {
                 continue;
             }
+            if (!point_is_inside_clip(x, y, clip)) {
+                continue;
+            }
             screen_cell(screen, terminal, x, y)->background = color;
         }
     }
 }
 
-static void draw_text(TerminalCell *screen, TerminalSize terminal, Clay_RenderCommand *command) {
+static void draw_text(TerminalCell *screen, TerminalSize terminal, Clay_RenderCommand *command, TerminalClip clip) {
     Clay_TextRenderData text = command->renderData.text;
     int x = (int)(command->boundingBox.x + 0.5f);
     int y = (int)(command->boundingBox.y + 0.5f);
@@ -291,6 +351,9 @@ static void draw_text(TerminalCell *screen, TerminalSize terminal, Clay_RenderCo
         int column = x + i;
         if (column >= 0 && column < terminal.width) {
             TerminalCell *cell = screen_cell(screen, terminal, column, y);
+            if (!point_is_inside_clip(column, y, clip)) {
+                continue;
+            }
             cell->value = text.stringContents.chars[i];
             cell->foreground = text.textColor;
         }
@@ -315,6 +378,14 @@ void terminal_render(Clay_RenderCommandArray commands, TerminalSize terminal) {
     TerminalCell *screen = malloc(screen_size * sizeof(TerminalCell));
     Clay_Color default_foreground = {232, 236, 234, 255};
     Clay_Color default_background = {18, 22, 28, 255};
+    TerminalClip clip_stack[16];
+    int clip_depth = 0;
+    TerminalClip current_clip = {
+        .x = 0,
+        .y = 0,
+        .width = terminal.width,
+        .height = terminal.height,
+    };
 
     if (screen == NULL) {
         fprintf(stderr, "Failed to allocate terminal buffer.\n");
@@ -334,9 +405,25 @@ void terminal_render(Clay_RenderCommandArray commands, TerminalSize terminal) {
         Clay_RenderCommand *command = Clay_RenderCommandArray_Get(&commands, i);
 
         if (command->commandType == CLAY_RENDER_COMMAND_TYPE_RECTANGLE) {
-            draw_rectangle(screen, terminal, command);
+            draw_rectangle(screen, terminal, command, current_clip);
         } else if (command->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT) {
-            draw_text(screen, terminal, command);
+            draw_text(screen, terminal, command, current_clip);
+        } else if (command->commandType == CLAY_RENDER_COMMAND_TYPE_SCISSOR_START) {
+            TerminalClip next_clip = {
+                .x = (int)(command->boundingBox.x + 0.5f),
+                .y = (int)(command->boundingBox.y + 0.5f),
+                .width = (int)(command->boundingBox.width + 0.5f),
+                .height = (int)(command->boundingBox.height + 0.5f),
+            };
+
+            if (clip_depth < (int)(sizeof(clip_stack) / sizeof(clip_stack[0]))) {
+                clip_stack[clip_depth++] = current_clip;
+            }
+            current_clip = terminal_clip_intersection(current_clip, next_clip);
+        } else if (command->commandType == CLAY_RENDER_COMMAND_TYPE_SCISSOR_END) {
+            if (clip_depth > 0) {
+                current_clip = clip_stack[--clip_depth];
+            }
         }
     }
 

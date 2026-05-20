@@ -460,6 +460,112 @@ SCENARIO(note_editor_treats_action_letters_as_text) {
     EXPECT_INT_EQ(app.state.view, APP_VIEW_NOTE_EDITOR);
 }
 
+SCENARIO(note_editor_moves_vertically_between_lines) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_NOTE_EDITOR;
+    snprintf(app.state.note_text, sizeof(app.state.note_text), "%s", "Alpha\nBeta\nGamma");
+    app.state.note_cursor = (int)strlen("Alpha\nBe");
+
+    GIVEN("the note editor cursor is in the middle line");
+
+    WHEN("the user presses up");
+    app_handle_key(&app, TERMINAL_KEY_UP);
+
+    THEN("the cursor moves to the same visual column on the previous line");
+    EXPECT_INT_EQ(app.state.note_cursor, (int)strlen("Al"));
+    EXPECT_INT_EQ(app.needs_redraw, 1);
+
+    WHEN("the user presses down");
+    app.needs_redraw = 0;
+    app_handle_key(&app, TERMINAL_KEY_DOWN);
+
+    THEN("the cursor returns to that column on the next line");
+    EXPECT_INT_EQ(app.state.note_cursor, (int)strlen("Alpha\nBe"));
+    EXPECT_INT_EQ(app.needs_redraw, 1);
+}
+
+SCENARIO(note_editor_vertical_movement_clamps_to_shorter_lines) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_NOTE_EDITOR;
+    snprintf(app.state.note_text, sizeof(app.state.note_text), "%s", "Longer\nYo\nLongest");
+    app.state.note_cursor = (int)strlen("Longer");
+
+    GIVEN("the note editor cursor is beyond the length of a neighboring line");
+
+    WHEN("the user presses down");
+    app_handle_key(&app, TERMINAL_KEY_DOWN);
+
+    THEN("the cursor lands at the end of the shorter line");
+    EXPECT_INT_EQ(app.state.note_cursor, (int)strlen("Longer\nYo"));
+}
+
+SCENARIO(note_editor_vertical_movement_stops_at_file_edges) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_NOTE_EDITOR;
+    snprintf(app.state.note_text, sizeof(app.state.note_text), "%s", "Top\nBottom");
+    app.state.note_cursor = 1;
+
+    GIVEN("the note editor cursor is on the first line");
+
+    WHEN("the user presses up");
+    app_handle_key(&app, TERMINAL_KEY_UP);
+
+    THEN("the cursor stays on the first line");
+    EXPECT_INT_EQ(app.state.note_cursor, 1);
+
+    WHEN("the user moves to the last line and presses down");
+    app.state.note_cursor = (int)strlen("Top\nBo");
+    app_handle_key(&app, TERMINAL_KEY_DOWN);
+
+    THEN("the cursor stays on the last line");
+    EXPECT_INT_EQ(app.state.note_cursor, (int)strlen("Top\nBo"));
+}
+
+SCENARIO(note_editor_scrolls_with_page_and_mouse_wheel) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_NOTE_EDITOR;
+
+    GIVEN("the note editor contains more text than fits on screen");
+
+    WHEN("the user scrolls down with the page key and mouse wheel");
+    app_handle_key(&app, TERMINAL_KEY_PAGE_DOWN);
+    app_handle_key(&app, TERMINAL_KEY_MOUSE_WHEEL_DOWN);
+
+    THEN("the editor records a scroll offset");
+    EXPECT_INT_EQ(app.state.note_scroll_line, 6);
+    EXPECT_INT_EQ(app.needs_redraw, 1);
+
+    WHEN("the user scrolls back above the top");
+    app_handle_key(&app, TERMINAL_KEY_PAGE_UP);
+    app_handle_key(&app, TERMINAL_KEY_PAGE_UP);
+    app_handle_key(&app, TERMINAL_KEY_MOUSE_WHEEL_UP);
+
+    THEN("the editor clamps scrolling at the first line");
+    EXPECT_INT_EQ(app.state.note_scroll_line, 0);
+}
+
+SCENARIO(detail_view_scrolls_with_page_and_mouse_wheel) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_DETAIL;
+
+    GIVEN("the markdown detail view contains more text than fits on screen");
+
+    WHEN("the user scrolls down");
+    app_handle_key(&app, TERMINAL_KEY_PAGE_DOWN);
+    app_handle_key(&app, TERMINAL_KEY_MOUSE_WHEEL_DOWN);
+
+    THEN("the detail view records a scroll offset");
+    EXPECT_INT_EQ(app.state.detail_scroll_line, 6);
+
+    WHEN("the user scrolls back above the top");
+    app_handle_key(&app, TERMINAL_KEY_PAGE_UP);
+    app_handle_key(&app, TERMINAL_KEY_PAGE_UP);
+    app_handle_key(&app, TERMINAL_KEY_MOUSE_WHEEL_UP);
+
+    THEN("the detail view clamps scrolling at the first line");
+    EXPECT_INT_EQ(app.state.detail_scroll_line, 0);
+}
+
 SCENARIO(escape_goes_back_to_the_previous_screen) {
     App app = app_create((TerminalSize) { .width = 100, .height = 30 });
     app.state.view = APP_VIEW_CAPTURE;
@@ -516,6 +622,11 @@ int main(void) {
     RUN_SCENARIO(detail_edit_bind_records_the_selected_note_path);
     RUN_SCENARIO(note_editor_edits_multiple_lines_and_saves);
     RUN_SCENARIO(note_editor_treats_action_letters_as_text);
+    RUN_SCENARIO(note_editor_moves_vertically_between_lines);
+    RUN_SCENARIO(note_editor_vertical_movement_clamps_to_shorter_lines);
+    RUN_SCENARIO(note_editor_vertical_movement_stops_at_file_edges);
+    RUN_SCENARIO(note_editor_scrolls_with_page_and_mouse_wheel);
+    RUN_SCENARIO(detail_view_scrolls_with_page_and_mouse_wheel);
     RUN_SCENARIO(escape_goes_back_to_the_previous_screen);
     RUN_SCENARIO(main_menu_key_returns_to_main_from_any_screen);
 

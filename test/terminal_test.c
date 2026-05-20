@@ -32,6 +32,10 @@ SCENARIO(fullscreen_entry_requests_modified_key_reporting) {
 
     THEN("modified key reporting is requested so Shift+Enter can be distinguished");
     EXPECT_TRUE(text_contains(sequence, "\033[>4;1m"));
+    EXPECT_TRUE(text_contains(sequence, "\033[?1000h"));
+    EXPECT_TRUE(text_contains(sequence, "\033[?1006h"));
+    EXPECT_TRUE(text_contains(terminal_leave_fullscreen_sequence(), "\033[?1006l"));
+    EXPECT_TRUE(text_contains(terminal_leave_fullscreen_sequence(), "\033[?1000l"));
     EXPECT_TRUE(text_contains(terminal_leave_fullscreen_sequence(), "\033[>4;0m"));
 }
 
@@ -80,6 +84,10 @@ SCENARIO(terminal_decodes_arrow_keys_and_ctrl_c) {
     const unsigned char escape[] = {27};
     const unsigned char shift_enter_csi_u[] = {27, '[', '1', '3', ';', '2', 'u'};
     const unsigned char shift_enter_modify_other_keys[] = {27, '[', '2', '7', ';', '2', ';', '1', '3', '~'};
+    const unsigned char page_up[] = {27, '[', '5', '~'};
+    const unsigned char page_down[] = {27, '[', '6', '~'};
+    const unsigned char wheel_up[] = {27, '[', '<', '6', '4', ';', '2', '0', ';', '1', '0', 'M'};
+    const unsigned char wheel_down[] = {27, '[', '<', '6', '5', ';', '2', '0', ';', '1', '0', 'M'};
     const unsigned char ctrl_c[] = {3};
     const unsigned char ctrl_s[] = {19};
 
@@ -95,6 +103,10 @@ SCENARIO(terminal_decodes_arrow_keys_and_ctrl_c) {
     EXPECT_INT_EQ(terminal_decode_key_sequence(escape, 1), TERMINAL_KEY_ESCAPE);
     EXPECT_INT_EQ(terminal_decode_key_sequence(shift_enter_csi_u, 7), TERMINAL_KEY_SHIFT_ENTER);
     EXPECT_INT_EQ(terminal_decode_key_sequence(shift_enter_modify_other_keys, 10), TERMINAL_KEY_SHIFT_ENTER);
+    EXPECT_INT_EQ(terminal_decode_key_sequence(page_up, 4), TERMINAL_KEY_PAGE_UP);
+    EXPECT_INT_EQ(terminal_decode_key_sequence(page_down, 4), TERMINAL_KEY_PAGE_DOWN);
+    EXPECT_INT_EQ(terminal_decode_key_sequence(wheel_up, 12), TERMINAL_KEY_MOUSE_WHEEL_UP);
+    EXPECT_INT_EQ(terminal_decode_key_sequence(wheel_down, 12), TERMINAL_KEY_MOUSE_WHEEL_DOWN);
     EXPECT_INT_EQ(terminal_decode_key_sequence(ctrl_c, 1), TERMINAL_KEY_CTRL_C);
     EXPECT_INT_EQ(terminal_decode_key_sequence(ctrl_s, 1), TERMINAL_KEY_CTRL_S);
 }

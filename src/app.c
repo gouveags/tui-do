@@ -185,6 +185,82 @@ static void note_backspace(App *app) {
     app->needs_redraw = 1;
 }
 
+static void note_cursor_shape(const char *text, int cursor, int *line_start, int *column, int *line_end) {
+    int length = (int)strlen(text);
+    int start = 0;
+    int end;
+
+    if (cursor < 0) {
+        cursor = 0;
+    }
+    if (cursor > length) {
+        cursor = length;
+    }
+
+    for (int i = 0; i < cursor; i++) {
+        if (text[i] == '\n') {
+            start = i + 1;
+        }
+    }
+
+    end = start;
+    while (text[end] != '\0' && text[end] != '\n') {
+        end++;
+    }
+
+    *line_start = start;
+    *column = cursor - start;
+    *line_end = end;
+}
+
+static int note_cursor_for_line_column(const char *text, int line_start, int desired_column) {
+    int line_end = line_start;
+    int line_length;
+
+    while (text[line_end] != '\0' && text[line_end] != '\n') {
+        line_end++;
+    }
+
+    line_length = line_end - line_start;
+    if (desired_column > line_length) {
+        desired_column = line_length;
+    }
+    if (desired_column < 0) {
+        desired_column = 0;
+    }
+
+    return line_start + desired_column;
+}
+
+static void note_move_vertical(App *app, int direction) {
+    int line_start;
+    int column;
+    int line_end;
+    int target_start;
+
+    note_cursor_shape(app->state.note_text, app->state.note_cursor, &line_start, &column, &line_end);
+
+    if (direction < 0) {
+        if (line_start == 0) {
+            return;
+        }
+
+        target_start = line_start - 1;
+        while (target_start > 0 && app->state.note_text[target_start - 1] != '\n') {
+            target_start--;
+        }
+    } else {
+        if (app->state.note_text[line_end] == '\0') {
+            return;
+        }
+
+        target_start = line_end + 1;
+    }
+
+    app->state.note_cursor = note_cursor_for_line_column(app->state.note_text, target_start, column);
+    app->needs_redraw = 1;
+}
+
 static void app_open_note_editor(App *app) {
     TodoIndexEntry *entry = app_selected_entry(app);
 
@@ -196,6 +272,7 @@ static void app_open_note_editor(App *app) {
     }
 
     app->state.note_cursor = (int)strlen(app->state.note_text);
+    app->state.note_scroll_line = 0;
     app->state.view = APP_VIEW_NOTE_EDITOR;
     app->needs_redraw = 1;
 }
@@ -294,6 +371,22 @@ static void app_handle_inbox_key(App *app, int key) {
     }
 }
 
+static void app_scroll_note(App *app, int delta) {
+    app->state.note_scroll_line += delta;
+    if (app->state.note_scroll_line < 0) {
+        app->state.note_scroll_line = 0;
+    }
+    app->needs_redraw = 1;
+}
+
+static void app_scroll_detail(App *app, int delta) {
+    app->state.detail_scroll_line += delta;
+    if (app->state.detail_scroll_line < 0) {
+        app->state.detail_scroll_line = 0;
+    }
+    app->needs_redraw = 1;
+}
+
 void app_handle_key(App *app, int key) {
     int previous_selection = app->state.selected_menu_index;
 
@@ -308,6 +401,14 @@ void app_handle_key(App *app, int key) {
     }
 
     if (app->state.view == APP_VIEW_NOTE_EDITOR) {
+        if (key == TERMINAL_KEY_PAGE_UP || key == TERMINAL_KEY_MOUSE_WHEEL_UP) {
+            app_scroll_note(app, -3);
+            return;
+        }
+        if (key == TERMINAL_KEY_PAGE_DOWN || key == TERMINAL_KEY_MOUSE_WHEEL_DOWN) {
+            app_scroll_note(app, 3);
+            return;
+        }
         if (key == TERMINAL_KEY_CTRL_S) {
             app_save_note_editor(app);
             return;
@@ -332,6 +433,14 @@ void app_handle_key(App *app, int key) {
                 app->state.note_cursor++;
                 app->needs_redraw = 1;
             }
+            return;
+        }
+        if (key == TERMINAL_KEY_UP) {
+            note_move_vertical(app, -1);
+            return;
+        }
+        if (key == TERMINAL_KEY_DOWN) {
+            note_move_vertical(app, 1);
             return;
         }
         if (key >= 32 && key <= 126) {
@@ -387,6 +496,14 @@ void app_handle_key(App *app, int key) {
     }
 
     if (app->state.view == APP_VIEW_DETAIL) {
+        if (key == TERMINAL_KEY_PAGE_UP || key == TERMINAL_KEY_MOUSE_WHEEL_UP) {
+            app_scroll_detail(app, -3);
+            return;
+        }
+        if (key == TERMINAL_KEY_PAGE_DOWN || key == TERMINAL_KEY_MOUSE_WHEEL_DOWN) {
+            app_scroll_detail(app, 3);
+            return;
+        }
         if (key == 'q') {
             app->should_quit = 1;
             return;
