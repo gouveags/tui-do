@@ -5,10 +5,14 @@ LDFLAGS ?=
 
 BUILD_DIR := build
 TARGET := $(BUILD_DIR)/tui-do
-SOURCES := src/main.c src/terminal.c src/ui.c
+SOURCES := src/main.c src/app.c src/terminal.c src/ui.c
 TEST_TARGET := $(BUILD_DIR)/test-main-menu
 TEST_SOURCES := test/main_menu_test.c src/terminal.c src/ui.c
-FORMAT_FILES := AGENTS.md README.md Makefile src/main.c src/terminal.c src/terminal.h src/ui.c src/ui.h test/main_menu_test.c test/test.h
+APP_TEST_TARGET := $(BUILD_DIR)/test-app
+APP_TEST_SOURCES := test/app_test.c src/app.c
+TERMINAL_TEST_TARGET := $(BUILD_DIR)/test-terminal
+TERMINAL_TEST_SOURCES := test/terminal_test.c src/terminal.c
+FORMAT_FILES := AGENTS.md README.md Makefile src/app.c src/app.h src/main.c src/terminal.c src/terminal.h src/ui.c src/ui.h test/app_test.c test/main_menu_test.c test/terminal_test.c test/test.h
 
 .PHONY: all run test lint format format-check smoke check clean
 
@@ -23,15 +27,25 @@ $(BUILD_DIR):
 run: $(TARGET)
 	./$(TARGET)
 
-test: $(TEST_TARGET)
+test: $(TEST_TARGET) $(APP_TEST_TARGET) $(TERMINAL_TEST_TARGET)
 	./$(TEST_TARGET)
+	./$(APP_TEST_TARGET)
+	./$(TERMINAL_TEST_TARGET)
 
 $(TEST_TARGET): $(TEST_SOURCES) test/test.h src/terminal.h src/ui.h vendor/clay/clay.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(TEST_SOURCES) -o $(TEST_TARGET) $(LDFLAGS)
 
+$(APP_TEST_TARGET): $(APP_TEST_SOURCES) test/test.h src/app.h src/terminal.h src/ui.h vendor/clay/clay.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(APP_TEST_SOURCES) -o $(APP_TEST_TARGET) $(LDFLAGS)
+
+$(TERMINAL_TEST_TARGET): $(TERMINAL_TEST_SOURCES) test/test.h src/terminal.h vendor/clay/clay.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(TERMINAL_TEST_SOURCES) -o $(TERMINAL_TEST_TARGET) $(LDFLAGS)
+
 lint:
 	$(CC) $(LINT_CFLAGS) -fsyntax-only $(SOURCES)
 	$(CC) $(LINT_CFLAGS) -fsyntax-only $(TEST_SOURCES)
+	$(CC) $(LINT_CFLAGS) -fsyntax-only $(APP_TEST_SOURCES)
+	$(CC) $(LINT_CFLAGS) -fsyntax-only $(TERMINAL_TEST_SOURCES)
 
 format:
 	perl -pi -e 's/[ \t]+$$//' $(FORMAT_FILES)

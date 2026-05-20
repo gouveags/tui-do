@@ -1,12 +1,24 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdint.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #define CLAY_IMPLEMENTATION
 #include "../vendor/clay/clay.h"
 
 #include "terminal.h"
 #include "ui.h"
+#include "app.h"
+
+static volatile sig_atomic_t terminal_was_resized = 0;
+
+static void handle_resize_signal(int signal_number) {
+    (void)signal_number;
+    terminal_was_resized = 1;
+}
 
 static void handle_clay_error(Clay_ErrorData error_data) {
     fprintf(stderr, "Clay error: %.*s\n", error_data.errorText.length, error_data.errorText.chars);
@@ -27,8 +39,14 @@ int main(void) {
     terminal_enable_raw_mode();
     atexit(terminal_disable_raw_mode);
     atexit(terminal_leave_fullscreen);
+    signal(SIGWINCH, handle_resize_signal);
 
     TerminalSize terminal = terminal_get_size();
+    if (terminal.width <= 0 || terminal.height <= 0) {
+        fprintf(stderr, "Could not determine terminal size.\n");
+        return 1;
+    }
+
     uint32_t clay_memory_size = Clay_MinMemorySize();
     void *clay_memory = malloc(clay_memory_size);
     if (clay_memory == NULL) {
@@ -44,13 +62,33 @@ int main(void) {
     );
     Clay_SetMeasureTextFunction(measure_text, NULL);
 
-    AppState state = {
-        .selected_menu_index = 0,
-    };
-    Clay_RenderCommandArray commands = ui_render_main_menu(&state, terminal);
-    terminal_render(commands, terminal);
+    App app = app_create(terminal);
 
-    while (terminal_read_key() != 'q') {
+    while (1) {
+        if (terminal_was_resized) {
+            terminal_was_resized = 0;
+            app_observe_terminal_size(&app, terminal_get_size());
+        }
+
+        app_observe_terminal_size(&app, terminal_get_size());
+
+        if (app.needs_redraw) {
+            Clay_RenderCommandArray commands = ui_render_main_menu(&app.state, app.terminal);
+            terminal_render(commands, app.terminal);
+            app.needs_redraw = 0;
+        }
+
+        int key = terminal_try_read_key();
+        if (key == 'q') {
+            break;
+        }
+        if (key == TERMINAL_KEY_NONE) {
+            struct timespec frame_pause = {
+                .tv_sec = 0,
+                .tv_nsec = 16000000,
+            };
+            nanosleep(&frame_pause, NULL);
+        }
     }
 
     free(clay_memory);

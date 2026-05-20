@@ -150,16 +150,33 @@ SCENARIO(selected_menu_item_follows_state) {
 }
 
 SCENARIO(terminal_size_honors_large_environment_dimensions) {
-    GIVEN("COLUMNS and LINES describe a large terminal");
-    setenv("COLUMNS", "160", 1);
-    setenv("LINES", "50", 1);
+    GIVEN("only the environment describes a large terminal");
 
-    WHEN("the terminal size is resolved");
-    TerminalSize terminal = terminal_get_size();
+    WHEN("terminal size candidates are resolved");
+    TerminalSize terminal = terminal_resolve_size(
+        (TerminalSize) { .width = 0, .height = 0 },
+        (TerminalSize) { .width = 0, .height = 0 },
+        (TerminalSize) { .width = 160, .height = 50 }
+    );
 
     THEN("the resolved size is not clamped to the fallback dimensions");
     EXPECT_INT_GE(terminal.width, 160);
     EXPECT_INT_GE(terminal.height, 50);
+}
+
+SCENARIO(terminal_size_resolution_does_not_clamp_to_a_minimum) {
+    GIVEN("the current terminal source reports a small size");
+
+    WHEN("terminal size candidates are resolved");
+    TerminalSize terminal = terminal_resolve_size(
+        (TerminalSize) { .width = 40, .height = 12 },
+        (TerminalSize) { .width = 0, .height = 0 },
+        (TerminalSize) { .width = 0, .height = 0 }
+    );
+
+    THEN("the exact reported size is used");
+    EXPECT_INT_EQ(terminal.width, 40);
+    EXPECT_INT_EQ(terminal.height, 12);
 }
 
 int main(void) {
@@ -167,6 +184,7 @@ int main(void) {
     RUN_SCENARIO(main_menu_paints_the_full_terminal_width);
     RUN_SCENARIO(selected_menu_item_follows_state);
     RUN_SCENARIO(terminal_size_honors_large_environment_dimensions);
+    RUN_SCENARIO(terminal_size_resolution_does_not_clamp_to_a_minimum);
 
     return finish_tests();
 }

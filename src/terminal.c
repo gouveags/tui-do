@@ -1,16 +1,15 @@
 #include "terminal.h"
 
 #include <stdint.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/select.h>
 #include <termios.h>
 #include <unistd.h>
-
-#define FALLBACK_TERMINAL_WIDTH 80
-#define FALLBACK_TERMINAL_HEIGHT 24
 
 typedef struct TerminalCell {
     char value;
@@ -33,32 +32,40 @@ static int read_terminal_size(int fd, TerminalSize *terminal) {
     return 0;
 }
 
+static int terminal_size_is_valid(TerminalSize terminal) {
+    return terminal.width > 0 && terminal.height > 0;
+}
+
+TerminalSize terminal_resolve_size(TerminalSize stdio_size, TerminalSize tty_size, TerminalSize env_size) {
+    if (terminal_size_is_valid(stdio_size)) {
+        return stdio_size;
+    }
+    if (terminal_size_is_valid(tty_size)) {
+        return tty_size;
+    }
+    if (terminal_size_is_valid(env_size)) {
+        return env_size;
+    }
+
+    return (TerminalSize) { .width = 0, .height = 0 };
+}
+
 TerminalSize terminal_get_size(void) {
-    TerminalSize terminal = {
-        .width = FALLBACK_TERMINAL_WIDTH,
-        .height = FALLBACK_TERMINAL_HEIGHT,
-    };
-    TerminalSize candidate;
+    TerminalSize stdio_size = {0};
+    TerminalSize tty_size = {0};
+    TerminalSize env_size = {0};
     int tty_fd;
 
     if (
-        read_terminal_size(STDOUT_FILENO, &candidate) ||
-        read_terminal_size(STDERR_FILENO, &candidate) ||
-        read_terminal_size(STDIN_FILENO, &candidate)
+        !read_terminal_size(STDOUT_FILENO, &stdio_size) &&
+        !read_terminal_size(STDERR_FILENO, &stdio_size)
     ) {
-        terminal = candidate;
+        read_terminal_size(STDIN_FILENO, &stdio_size);
     }
 
     tty_fd = open("/dev/tty", O_RDONLY);
     if (tty_fd >= 0) {
-        if (read_terminal_size(tty_fd, &candidate)) {
-            if (candidate.width > terminal.width) {
-                terminal.width = candidate.width;
-            }
-            if (candidate.height > terminal.height) {
-                terminal.height = candidate.height;
-            }
-        }
+        read_terminal_size(tty_fd, &tty_size);
         close(tty_fd);
     }
 
@@ -68,16 +75,11 @@ TerminalSize terminal_get_size(void) {
         int width = atoi(columns);
         int height = atoi(lines);
         if (width > 0 && height > 0) {
-            if (width > terminal.width) {
-                terminal.width = width;
-            }
-            if (height > terminal.height) {
-                terminal.height = height;
-            }
+            env_size = (TerminalSize) { .width = width, .height = height };
         }
     }
 
-    return terminal;
+    return terminal_resolve_size(stdio_size, tty_size, env_size);
 }
 
 void terminal_enter_fullscreen(void) {
@@ -120,9 +122,37 @@ void terminal_disable_raw_mode(void) {
 int terminal_read_key(void) {
     unsigned char key;
     if (read(STDIN_FILENO, &key, 1) != 1) {
-        return -1;
+        return TERMINAL_KEY_NONE;
     }
     return key;
+}
+
+int terminal_try_read_key_from_fd(int fd) {
+    unsigned char key;
+    ssize_t bytes_read = read(fd, &key, 1);
+
+    if (bytes_read == 1) {
+        return key;
+    }
+    if (bytes_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+        return TERMINAL_KEY_NONE;
+    }
+
+    return TERMINAL_KEY_NONE;
+}
+
+int terminal_try_read_key(void) {
+    fd_set read_fds;
+    struct timeval timeout = {0};
+
+    FD_ZERO(&read_fds);
+    FD_SET(STDIN_FILENO, &read_fds);
+
+    if (select(STDIN_FILENO + 1, &read_fds, NULL, NULL, &timeout) <= 0) {
+        return TERMINAL_KEY_NONE;
+    }
+
+    return terminal_try_read_key_from_fd(STDIN_FILENO);
 }
 
 static TerminalCell *screen_cell(TerminalCell *screen, TerminalSize terminal, int x, int y) {
@@ -211,7 +241,7 @@ void terminal_render(Clay_RenderCommandArray commands, TerminalSize terminal) {
         }
     }
 
-    printf("\033[H\033[0m");
+    printf("%s", terminal_render_prefix());
     for (int y = 0; y < terminal.height; y++) {
         Clay_Color current_foreground = {0, 0, 0, 0};
         Clay_Color current_background = {0, 0, 0, 0};
@@ -235,4 +265,8 @@ void terminal_render(Clay_RenderCommandArray commands, TerminalSize terminal) {
     fflush(stdout);
 
     free(screen);
+}
+
+const char *terminal_render_prefix(void) {
+    return "\033[2J\033[H\033[0m";
 }
