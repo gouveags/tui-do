@@ -272,6 +272,88 @@ SCENARIO(capture_footer_lists_every_available_bind) {
     EXPECT_TRUE(render_contains_text(commands, "quit"));
 }
 
+SCENARIO(inbox_screen_renders_entries_and_binds) {
+    TerminalSize terminal = { .width = 160, .height = 50 };
+    AppState state = {
+        .view = APP_VIEW_INBOX,
+        .selected_inbox_index = 0,
+        .inbox = {
+            .entry_count = 2,
+            .entries = {
+                {
+                    .id = "entry-2",
+                    .title = "Newer note",
+                    .created_at = 20,
+                    .updated_at = 20,
+                },
+                {
+                    .id = "entry-1",
+                    .title = "Older note",
+                    .created_at = 10,
+                    .updated_at = 10,
+                },
+            },
+        },
+    };
+
+    GIVEN("the inbox has entries");
+    setup_clay(terminal);
+
+    WHEN("the inbox is rendered");
+    Clay_RenderCommandArray commands = ui_render_app(&state, terminal);
+
+    THEN("entries and navigation binds are visible");
+    EXPECT_TRUE(render_contains_text(commands, "inbox"));
+    EXPECT_TRUE(render_contains_text(commands, "Newer note"));
+    EXPECT_TRUE(render_contains_text(commands, "Older note"));
+    EXPECT_TRUE(render_contains_text(commands, "up/down"));
+    EXPECT_TRUE(render_contains_text(commands, "move"));
+    EXPECT_TRUE(render_contains_text(commands, "enter"));
+    EXPECT_TRUE(render_contains_text(commands, "open"));
+    EXPECT_TRUE(render_contains_text(commands, "n/1"));
+    EXPECT_TRUE(render_contains_text(commands, "new"));
+    EXPECT_TRUE(render_contains_text(commands, "esc/m"));
+    EXPECT_TRUE(render_contains_text(commands, "main"));
+}
+
+SCENARIO(detail_screen_renders_selected_entry_shape) {
+    TerminalSize terminal = { .width = 160, .height = 50 };
+    AppState state = {
+        .view = APP_VIEW_DETAIL,
+        .selected_inbox_index = 0,
+        .inbox = {
+            .entry_count = 1,
+            .entries = {
+                {
+                    .id = "entry-42",
+                    .title = "Clarify project scope",
+                    .created_at = 4242,
+                    .updated_at = 4242,
+                },
+            },
+        },
+    };
+
+    GIVEN("a selected entry detail is open");
+    setup_clay(terminal);
+
+    WHEN("the detail screen is rendered");
+    Clay_RenderCommandArray commands = ui_render_app(&state, terminal);
+
+    THEN("the entry identity and future markdown shape are visible");
+    EXPECT_TRUE(render_contains_text(commands, "detail"));
+    EXPECT_TRUE(render_contains_text(commands, "Clarify project scope"));
+    EXPECT_TRUE(render_contains_text(commands, "entry-42"));
+    EXPECT_TRUE(render_contains_text(commands, "created"));
+    EXPECT_TRUE(render_contains_text(commands, "4242"));
+    EXPECT_TRUE(render_contains_text(commands, "markdown"));
+    EXPECT_TRUE(render_contains_text(commands, "items/notes.md"));
+    EXPECT_TRUE(render_contains_text(commands, "esc"));
+    EXPECT_TRUE(render_contains_text(commands, "back"));
+    EXPECT_TRUE(render_contains_text(commands, "m"));
+    EXPECT_TRUE(render_contains_text(commands, "main"));
+}
+
 int main(void) {
     RUN_SCENARIO(main_menu_contains_the_core_actions);
     RUN_SCENARIO(main_menu_footer_lists_every_available_bind);
@@ -281,6 +363,8 @@ int main(void) {
     RUN_SCENARIO(terminal_size_resolution_does_not_clamp_to_a_minimum);
     RUN_SCENARIO(capture_input_renders_a_visible_cursor);
     RUN_SCENARIO(capture_footer_lists_every_available_bind);
+    RUN_SCENARIO(inbox_screen_renders_entries_and_binds);
+    RUN_SCENARIO(detail_screen_renders_selected_entry_shape);
 
     return finish_tests();
 }

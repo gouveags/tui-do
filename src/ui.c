@@ -1,6 +1,7 @@
 #include "ui.h"
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 
 static const Clay_Color COLOR_BACKGROUND = {18, 22, 28, 255};
@@ -16,6 +17,15 @@ static Clay_String clay_string(const char *text) {
         .length = (int32_t)strlen(text),
         .chars = text,
     };
+}
+
+static char *ui_scratch_text(void) {
+    static char buffers[16][128];
+    static int index = 0;
+
+    index = (index + 1) % 16;
+    buffers[index][0] = '\0';
+    return buffers[index];
 }
 
 static void draw_text(const char *text, Clay_Color color) {
@@ -276,6 +286,147 @@ static void draw_capture_footer(void) {
     }
 }
 
+static void draw_inbox_footer(void) {
+    CLAY(CLAY_ID("InboxFooter"), {
+        .layout = {
+            .sizing = {
+                .width = CLAY_SIZING_GROW(0),
+                .height = CLAY_SIZING_FIXED(2),
+            },
+            .padding = {
+                .left = 3,
+                .right = 3,
+            },
+            .childAlignment = {
+                .y = CLAY_ALIGN_Y_CENTER,
+            },
+            .childGap = 3,
+        },
+        .backgroundColor = COLOR_SURFACE,
+    }) {
+        draw_text("up/down", COLOR_ACCENT);
+        draw_text("move", COLOR_MUTED);
+        draw_text("enter", COLOR_ACCENT);
+        draw_text("open", COLOR_MUTED);
+        draw_text("n/1", COLOR_ACCENT);
+        draw_text("new", COLOR_MUTED);
+        draw_text("esc/m", COLOR_ACCENT);
+        draw_text("main", COLOR_MUTED);
+        draw_text("q/ctrl+c", COLOR_ACCENT);
+        draw_text("quit", COLOR_MUTED);
+    }
+}
+
+static void draw_detail_footer(void) {
+    CLAY(CLAY_ID("DetailFooter"), {
+        .layout = {
+            .sizing = {
+                .width = CLAY_SIZING_GROW(0),
+                .height = CLAY_SIZING_FIXED(2),
+            },
+            .padding = {
+                .left = 3,
+                .right = 3,
+            },
+            .childAlignment = {
+                .y = CLAY_ALIGN_Y_CENTER,
+            },
+            .childGap = 3,
+        },
+        .backgroundColor = COLOR_SURFACE,
+    }) {
+        draw_text("esc", COLOR_ACCENT);
+        draw_text("back", COLOR_MUTED);
+        draw_text("m", COLOR_ACCENT);
+        draw_text("main", COLOR_MUTED);
+        draw_text("q/ctrl+c", COLOR_ACCENT);
+        draw_text("quit", COLOR_MUTED);
+    }
+}
+
+static void draw_inbox_entry(int index, const TodoIndexEntry *entry, bool selected) {
+    char *meta = ui_scratch_text();
+
+    snprintf(meta, 128, "created %lld  items %zu/%zu", entry->created_at, entry->done_count, entry->item_count);
+    CLAY(CLAY_IDI("InboxEntry", index), {
+        .layout = {
+            .sizing = {
+                .width = CLAY_SIZING_GROW(0),
+                .height = CLAY_SIZING_FIXED(4),
+            },
+            .padding = {
+                .left = 2,
+                .right = 2,
+                .top = 1,
+            },
+            .childGap = 2,
+            .childAlignment = {
+                .y = CLAY_ALIGN_Y_CENTER,
+            },
+        },
+        .backgroundColor = selected ? COLOR_SURFACE_ACTIVE : COLOR_SURFACE,
+    }) {
+        draw_text(selected ? ">" : " ", selected ? COLOR_ACCENT : COLOR_MUTED);
+        CLAY(CLAY_IDI("InboxEntryCopy", index), {
+            .layout = {
+                .sizing = {
+                    .width = CLAY_SIZING_GROW(0),
+                    .height = CLAY_SIZING_FIT(0),
+                },
+                .layoutDirection = CLAY_TOP_TO_BOTTOM,
+            },
+        }) {
+            draw_text(entry->title, selected ? COLOR_SELECTED : COLOR_TEXT);
+            draw_text(meta, COLOR_MUTED);
+        }
+    }
+}
+
+static Clay_RenderCommandArray ui_render_inbox(AppState *state, TerminalSize terminal) {
+    Clay_SetLayoutDimensions((Clay_Dimensions) { .width = (float)terminal.width, .height = (float)terminal.height });
+    Clay_BeginLayout();
+
+    CLAY(CLAY_ID("InboxRoot"), {
+        .layout = {
+            .sizing = {
+                .width = CLAY_SIZING_GROW(0),
+                .height = CLAY_SIZING_GROW(0),
+            },
+            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+            .padding = {
+                .left = 2,
+                .right = 2,
+                .top = 1,
+                .bottom = 1,
+            },
+            .childGap = 2,
+        },
+        .backgroundColor = COLOR_BACKGROUND,
+    }) {
+        draw_top_bar("inbox");
+        CLAY(CLAY_ID("InboxBody"), {
+            .layout = {
+                .sizing = {
+                    .width = CLAY_SIZING_GROW(0),
+                    .height = CLAY_SIZING_GROW(0),
+                },
+                .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                .childGap = 1,
+            },
+        }) {
+            if (state->inbox.entry_count == 0) {
+                draw_text("No entries yet.", COLOR_MUTED);
+            }
+            for (size_t i = 0; i < state->inbox.entry_count && i < 12; i++) {
+                draw_inbox_entry((int)i, &state->inbox.entries[i], state->selected_inbox_index == (int)i);
+            }
+        }
+        draw_inbox_footer();
+    }
+
+    return Clay_EndLayout(0.0f);
+}
+
 static Clay_RenderCommandArray ui_render_capture(AppState *state, TerminalSize terminal) {
     Clay_SetLayoutDimensions((Clay_Dimensions) { .width = (float)terminal.width, .height = (float)terminal.height });
     Clay_BeginLayout();
@@ -342,9 +493,80 @@ static Clay_RenderCommandArray ui_render_capture(AppState *state, TerminalSize t
     return Clay_EndLayout(0.0f);
 }
 
+static Clay_RenderCommandArray ui_render_detail(AppState *state, TerminalSize terminal) {
+    TodoIndexEntry *entry = NULL;
+    char *created = ui_scratch_text();
+
+    if (
+        state->selected_inbox_index >= 0 &&
+        state->selected_inbox_index < (int)state->inbox.entry_count
+    ) {
+        entry = &state->inbox.entries[state->selected_inbox_index];
+    }
+
+    Clay_SetLayoutDimensions((Clay_Dimensions) { .width = (float)terminal.width, .height = (float)terminal.height });
+    Clay_BeginLayout();
+
+    CLAY(CLAY_ID("DetailRoot"), {
+        .layout = {
+            .sizing = {
+                .width = CLAY_SIZING_GROW(0),
+                .height = CLAY_SIZING_GROW(0),
+            },
+            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+            .padding = {
+                .left = 2,
+                .right = 2,
+                .top = 1,
+                .bottom = 1,
+            },
+            .childGap = 2,
+        },
+        .backgroundColor = COLOR_BACKGROUND,
+    }) {
+        draw_top_bar("detail");
+        CLAY(CLAY_ID("DetailBody"), {
+            .layout = {
+                .sizing = {
+                    .width = CLAY_SIZING_GROW(0),
+                    .height = CLAY_SIZING_GROW(0),
+                },
+                .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                .childGap = 1,
+                .padding = {
+                    .left = 3,
+                    .right = 3,
+                    .top = 2,
+                },
+            },
+        }) {
+            if (entry == NULL) {
+                draw_text("No entry selected.", COLOR_MUTED);
+            } else {
+                snprintf(created, 128, "%lld", entry->created_at);
+                draw_text(entry->title, COLOR_SELECTED);
+                draw_text(entry->id, COLOR_MUTED);
+                draw_text("created", COLOR_ACCENT);
+                draw_text(created, COLOR_TEXT);
+                draw_text("markdown", COLOR_ACCENT);
+                draw_text("items/notes.md", COLOR_TEXT);
+            }
+        }
+        draw_detail_footer();
+    }
+
+    return Clay_EndLayout(0.0f);
+}
+
 Clay_RenderCommandArray ui_render_app(AppState *state, TerminalSize terminal) {
     if (state->view == APP_VIEW_CAPTURE) {
         return ui_render_capture(state, terminal);
+    }
+    if (state->view == APP_VIEW_INBOX) {
+        return ui_render_inbox(state, terminal);
+    }
+    if (state->view == APP_VIEW_DETAIL) {
+        return ui_render_detail(state, terminal);
     }
 
     return ui_render_main_menu(state, terminal);

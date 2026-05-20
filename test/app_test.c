@@ -248,14 +248,114 @@ SCENARIO(capture_view_saves_a_new_inbox_todo) {
     WHEN("the user presses Enter");
     app_handle_key(&app, TERMINAL_KEY_ENTER);
 
-    THEN("the todo is saved and the app returns to the main menu");
-    EXPECT_INT_EQ(app.state.view, APP_VIEW_MAIN_MENU);
+    THEN("the todo is saved and the app opens the inbox");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_INBOX);
     EXPECT_TRUE(strcmp(app.state.capture_title, "") == 0);
+    EXPECT_INT_EQ((int)app.state.inbox.entry_count, 1);
+    EXPECT_TRUE(strcmp(app.state.inbox.entries[0].title, "Fix") == 0);
     EXPECT_INT_EQ(storage_load_index("build/app-capture-save", &index), 0);
     EXPECT_INT_EQ((int)index.entry_count, 1);
     EXPECT_TRUE(strcmp(index.entries[0].title, "Fix") == 0);
     EXPECT_INT_EQ((int)index.entries[0].created_at, 1234);
     EXPECT_INT_EQ((int)index.entries[0].updated_at, 1234);
+}
+
+SCENARIO(load_menu_opens_the_inbox_newest_first) {
+    App app = app_create_with_storage((TerminalSize) { .width = 100, .height = 30 }, "build/app-inbox-load");
+    Todo older = {
+        .id = "entry-older",
+        .title = "Older note",
+        .created_at = 10,
+        .updated_at = 10,
+    };
+    Todo newer = {
+        .id = "entry-newer",
+        .title = "Newer note",
+        .created_at = 20,
+        .updated_at = 20,
+    };
+
+    GIVEN("two notebook entries have been stored");
+    system("rm -rf build/app-inbox-load");
+    storage_save_todo("build/app-inbox-load", &older);
+    storage_save_todo("build/app-inbox-load", &newer);
+
+    WHEN("the user activates Load a to-do");
+    app_handle_key(&app, '2');
+
+    THEN("the inbox opens with the newest entry first");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_INBOX);
+    EXPECT_INT_EQ((int)app.state.inbox.entry_count, 2);
+    EXPECT_TRUE(strcmp(app.state.inbox.entries[0].title, "Newer note") == 0);
+    EXPECT_TRUE(strcmp(app.state.inbox.entries[1].title, "Older note") == 0);
+    EXPECT_INT_EQ(app.state.selected_inbox_index, 0);
+}
+
+SCENARIO(inbox_navigation_opens_the_selected_detail) {
+    App app = app_create_with_storage((TerminalSize) { .width = 100, .height = 30 }, "build/app-inbox-nav");
+    Todo first = {
+        .id = "entry-first",
+        .title = "First",
+        .created_at = 10,
+        .updated_at = 10,
+    };
+    Todo second = {
+        .id = "entry-second",
+        .title = "Second",
+        .created_at = 20,
+        .updated_at = 20,
+    };
+
+    GIVEN("the inbox is open with saved entries");
+    system("rm -rf build/app-inbox-nav");
+    storage_save_todo("build/app-inbox-nav", &first);
+    storage_save_todo("build/app-inbox-nav", &second);
+    app_handle_key(&app, '2');
+
+    WHEN("the user moves down and opens an entry");
+    app_handle_key(&app, TERMINAL_KEY_DOWN);
+    app_handle_key(&app, TERMINAL_KEY_ENTER);
+
+    THEN("the detail screen opens for the selected entry");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_DETAIL);
+    EXPECT_INT_EQ(app.state.selected_inbox_index, 1);
+    EXPECT_TRUE(strcmp(app.state.inbox.entries[app.state.selected_inbox_index].title, "First") == 0);
+}
+
+SCENARIO(inbox_create_bind_starts_a_new_capture) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_INBOX;
+
+    GIVEN("the inbox is open");
+
+    WHEN("the user presses n");
+    app_handle_key(&app, 'n');
+
+    THEN("a new capture starts");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_CAPTURE);
+    EXPECT_TRUE(strcmp(app.state.capture_title, "") == 0);
+    EXPECT_INT_EQ(app.state.capture_cursor, 0);
+}
+
+SCENARIO(escape_returns_from_detail_to_inbox_before_main_menu) {
+    App app = app_create((TerminalSize) { .width = 100, .height = 30 });
+    app.state.view = APP_VIEW_DETAIL;
+    app.state.inbox.entry_count = 1;
+    snprintf(app.state.inbox.entries[0].title, sizeof(app.state.inbox.entries[0].title), "%s", "Open item");
+
+    GIVEN("an item detail is open");
+
+    WHEN("the user presses Escape");
+    app_handle_key(&app, TERMINAL_KEY_ESCAPE);
+
+    THEN("the app returns to the previous inbox screen");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_INBOX);
+
+    WHEN("the user presses Escape again");
+    app_handle_key(&app, TERMINAL_KEY_ESCAPE);
+
+    THEN("the app returns to the main menu");
+    EXPECT_INT_EQ(app.state.view, APP_VIEW_MAIN_MENU);
 }
 
 SCENARIO(escape_goes_back_to_the_previous_screen) {
@@ -308,6 +408,10 @@ int main(void) {
     RUN_SCENARIO(capture_view_backspace_removes_before_cursor);
     RUN_SCENARIO(capture_view_does_not_save_empty_titles);
     RUN_SCENARIO(capture_view_saves_a_new_inbox_todo);
+    RUN_SCENARIO(load_menu_opens_the_inbox_newest_first);
+    RUN_SCENARIO(inbox_navigation_opens_the_selected_detail);
+    RUN_SCENARIO(inbox_create_bind_starts_a_new_capture);
+    RUN_SCENARIO(escape_returns_from_detail_to_inbox_before_main_menu);
     RUN_SCENARIO(escape_goes_back_to_the_previous_screen);
     RUN_SCENARIO(main_menu_key_returns_to_main_from_any_screen);
 
